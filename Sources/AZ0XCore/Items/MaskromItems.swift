@@ -137,16 +137,14 @@ struct MaskromItems {
 
     // MARK: - T03 DQ eye scan
 
-    /// The scan's own verdict is the criterion, and whether it finished is validity.
+    /// The scan's own verdict is the only criterion. Everything else the tool answers itself.
     ///
-    /// v2.7 answers both: `eyescan.completed` is false when the device was still streaming at the
-    /// deadline, and `wedged` when it stopped responding and the fixture must be replugged. Both
-    /// also carry an `errorCode`, so the envelope has usually settled the item before we get here —
-    /// these checks are the belt to that pair of braces.
-    ///
-    /// Before v2.7 this was one boolean for both, and a real AZ04A run ended after 122 s with the
-    /// transcript stopped mid eye-data and not one `all result:` line — reported as 不通过 on a board
-    /// whose eye was never measured.
+    /// Before v2.7 one boolean covered both "a DQ eye is bad" and "the scan stopped part way", and a
+    /// real AZ04A ended after 122 s with the transcript cut off mid eye-data and not one
+    /// `all result:` line — reported as 不通过 on a board whose eye was never measured. v2.7 routes
+    /// that through `errorCode: scanIncomplete`, and a wedged device through `deviceWedged`, so the
+    /// envelope settles both before this body runs. `completed` is recorded as a measurement, not
+    /// checked: a check here could only repeat the envelope, or contradict it.
     func runT03() async -> ItemResult {
         var r = ItemResult(code: "T03")
         // No capability check: a model without the eye scan never has this item.
