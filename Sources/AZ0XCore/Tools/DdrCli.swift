@@ -33,11 +33,6 @@ struct DdrCli {
         return String(rest.prefix { !$0.isWhitespace })
     }
 
-    /// The board with this tool device id, if it is enumerated right now.
-    func device(id: String) async -> Device? {
-        await devices().first { $0.id == id }
-    }
-
     /// Waits for one specific board to re-enumerate and stabilise before its next item runs.
     /// Addressed by the tool's device id, whose port chain survives re-enumeration; the USB
     /// address in it used to move between boards of one model.
