@@ -1,0 +1,55 @@
+import XCTest
+@testable import AZ0XCore
+
+/// The boundary this iteration exists to establish, enforced rather than documented.
+///
+/// In the first iteration the interface lived inside the core library. A view observed `Bench`, so
+/// `Bench` became `@MainActor` and `ObservableObject`; the engine drove `Bench`, so `Sequencer`
+/// became `@MainActor` too. The result was that every board's I/O orchestration ran on the main
+/// actor and all eight benches shared it — not a decision anyone made, but SwiftUI's observation
+/// model spreading backwards through `@Published`.
+///
+/// The interface will come back as its own target depending on this one. Nothing here may depend on
+/// it, and the cheapest way to keep that true is to fail the build's tests when it stops being true.
+final class CoreHasNoUITests: XCTestCase {
+
+    private var coreRoot: URL {
+        URL(fileURLWithPath: #filePath)                    // Tests/AZ0XCoreTests/ThisFile.swift
+            .deletingLastPathComponent()                   // Tests/AZ0XCoreTests
+            .deletingLastPathComponent()                   // Tests
+            .deletingLastPathComponent()                   // package root
+            .appendingPathComponent("Sources/AZ0XCore")
+    }
+
+    private func coreSources() throws -> [URL] {
+        let e = FileManager.default.enumerator(at: coreRoot, includingPropertiesForKeys: nil)
+        return (e?.compactMap { $0 as? URL } ?? []).filter { $0.pathExtension == "swift" }
+    }
+
+    func testTheCoreImportsNoInterfaceFramework() throws {
+        let sources = try coreSources()
+        XCTAssertGreaterThan(sources.count, 10, "没找到核心源码，这条测试就没在检查任何东西")
+
+        let forbidden = ["SwiftUI", "AppKit", "Combine"]
+        for url in sources {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            for framework in forbidden {
+                XCTAssertFalse(text.contains("import \(framework)"),
+                               "\(url.lastPathComponent) 引入了 \(framework)。"
+                             + "界面是另一个 target 的事；让它爬回核心，引擎就又会被钉在主线程上。")
+            }
+        }
+    }
+
+    /// And no observation attributes either: those are how the coupling arrived last time.
+    func testTheCoreDeclaresNoObservableState() throws {
+        for url in try coreSources() {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            for marker in ["@Published", "ObservableObject", "@StateObject", "@EnvironmentObject"] {
+                XCTAssertFalse(text.contains(marker),
+                               "\(url.lastPathComponent) 用了 \(marker)。核心的状态由核心自己表达，"
+                             + "界面在它自己那一侧适配。")
+            }
+        }
+    }
+}
