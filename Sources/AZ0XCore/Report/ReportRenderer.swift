@@ -292,12 +292,15 @@ struct ReportRenderer {
     /// Which values each item shows in the result column. Internal, not private, so
     /// `KeyMeasurementNameTests` can assert every name here is one a producer actually records.
     static let keyMeasurementNames: [String: [String]] = [
+        // The cfg name already carries the capacity and the topology, so it is the whole column.
         "T01": ["匹配 cfg"],
-        "T02": ["检出容量", "总线位宽"],
-        // The names `runT03` actually records. It asked for `all result 行数` until 2026-08-21,
-        // which no producer ever wrote, so the lookup always missed and the fallback listed
-        // these same two anyway — the rendered column is unchanged, the dead key is gone.
-        "T03": ["扫描耗时", "扫描判定"],
+        // T02's verdict is the information; the cfg says which test produced it. It asked for
+        // 检出容量 and 总线位宽 until v2.7, when both stopped being recorded here — the geometry is
+        // T01's, from the tool's structured field, rather than scraped out of T02's log.
+        "T02": ["检测 cfg"],
+        // The ✅ already carries the verdict. What a reader wants beside it is how long the scan took
+        // and whether it ran to the end: 11.7 s on an RK3576, against an RK3588 cut off at 122 s.
+        "T03": ["工具耗时", "扫描跑完"],
         // T04 and E01 carry only the image name and the flashing duration, as required.
         "T04": ["镜像", "镜像校验", "刷写耗时"],
         "T05": ["峰值带宽", "DDR 频率"],

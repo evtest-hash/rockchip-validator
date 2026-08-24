@@ -19,18 +19,21 @@ struct DdrCli {
     // MARK: - Enumeration
 
     /// Lists the currently enumerated Rockchip devices.
+    ///
+    /// From `--list --json`, which v2.7 answers with a structured `devices` array. It used to parse
+    /// the human `--list` text for `id=` and `pid=` — a format meant for a person to read, and one
+    /// nothing stops from being reworded.
     func devices() async -> [Device] {
-        let r = await Shell.run(executable, ["--list"], timeout: 60)
-        return r.stdout.split(separator: "\n").compactMap { line in
-            guard let pid = field(line, "pid=") else { return nil }
-            return Device(id: field(line, "id=") ?? "", pid: pid.lowercased())
+        let r = await Shell.run(executable, ["--list", "--json"], timeout: 60)
+        guard let data = r.stdout.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let listed = obj["devices"] as? [[String: Any]]
+        else { return [] }
+        return listed.compactMap { entry in
+            guard let id = entry.str("deviceID"), let pid = entry.str("pid") else { return nil }
+            // Lower-cased to match `DeviceModel.maskromPID`, which is written that way.
+            return Device(id: id, pid: pid.lowercased())
         }
-    }
-
-    private func field(_ line: Substring, _ key: String) -> String? {
-        guard let r = line.range(of: key) else { return nil }
-        let rest = line[r.upperBound...]
-        return String(rest.prefix { !$0.isWhitespace })
     }
 
     /// Waits for one specific board to re-enumerate and stabilise before its next item runs.

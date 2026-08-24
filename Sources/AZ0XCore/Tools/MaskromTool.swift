@@ -52,15 +52,18 @@ extension MaskromTool {
     }
 
     /// What the board says about itself while still in maskrom: its OTP identity.
+    ///
+    /// Top level, which is where v2.7 puts them — verified against a real AZ08, where `detect`
+    /// carries none of the three. An earlier revision looked inside `detect` first and fell back to
+    /// the top level; that nesting was a v2.6 shape and the fallback was doing all the work.
     func identity(deviceID: String) async -> DdrCli.Identity? {
         let jr = await runJSON("--detect", deviceID: deviceID, timeout: 120)
-        guard jr.parseError == nil else { return nil }
-        let det = jr.json.dict("detect") ?? jr.json
-        guard let cpuid = det.str("cpuid") ?? jr.json.str("cpuid"),
-              let serial = det.str("serial") ?? jr.json.str("serial"),
-              !cpuid.isEmpty, !serial.isEmpty else { return nil }
+        guard jr.parseError == nil,
+              let cpuid = jr.json.str("cpuid"), !cpuid.isEmpty,
+              let serial = jr.json.str("serial"), !serial.isEmpty
+        else { return nil }
         return DdrCli.Identity(cpuid: cpuid, serial: serial,
-                               variant: det.str("chipVariant") ?? jr.json.str("chipVariant"))
+                               variant: jr.json.str("chipVariant"))
     }
 }
 
