@@ -20,14 +20,16 @@ final class EngineTests: XCTestCase {
 
     private func tool() -> ScriptedMaskromTool {
         ScriptedMaskromTool([
-            "--detect": .init(json: ["detect": ["type": "LPDDR4X", "capacityMB": 8192,
+            "--detect": .init(json: ["detect": ["pass": true, "type": "LPDDR4X", "capacityMB": 8192,
                                                 "channels": 4, "csPerDie": 1,
-                                                "cfg": "lpddr4x.cfg", "tier": "exact",
-                                                "cpuid": "c0ffee01", "serial": "34376b2c031e323e"]],
+                                                "tier": "uniqueByCoarse", "cfg": "lpddr4x.cfg"],
+                                    "cpuid": "c0ffee01", "serial": "34376b2c031e323e"],
                               exitCode: 0),
-            "--solder": .init(json: ["solder": ["outcome": "PASS", "log": "Size=8192MB BW=64"]],
+            "--solder": .init(json: ["solder": ["pass": true, "bootSucceeded": true,
+                                                "log": "Size=8192MB BW=64"]],
                               exitCode: 0),
-            "--eyescan": .init(json: ["eyescan": ["go": true, "transcript": "pass"],
+            "--eyescan": .init(json: ["eyescan": ["pass": true, "completed": true, "wedged": false,
+                                      "bytes": 40_960, "transcript": "all result: pass"],
                                       "elapsedMs": 800_000], exitCode: 0),
         ])
     }

@@ -2,9 +2,11 @@ import Foundation
 
 /// The maskrom-domain items: T01 spec, T02 soldering, T03 eye scan, T04 and E01 flashing.
 ///
-/// Each one fills in two check lists and calls `conclude()`. Which list a check goes in is the whole
-/// decision: `criteria` can condemn the material, `validity` can only say this run was not worth
-/// judging. The tool's exit code decides which of the two an item is even allowed to reach.
+/// Since the tool's v2.7 contract these three read the same way, because the tool now answers the
+/// two questions separately itself: `errorCode` says whether a verdict was produced at all, and
+/// `pass` is the verdict. Its own comment puts it best — exit 1 means *the board is untested, not
+/// bad*. So the whole of the old adaptation is gone: no exit-code table, no hunting for
+/// `all dq eye scan done` in the transcript, no comparing `outcome` against the string "PASS".
 struct MaskromItems {
 
     let cli: any MaskromTool
@@ -12,158 +14,163 @@ struct MaskromItems {
     /// The board this instance addresses, fixed for its life.
     let deviceID: String
 
-    /// The tool's exit code, which is the primary source: 0 pass, 1 environment, 2 check failed.
-    private enum ToolExit {
-        case ok
-        /// Exit 1: no device, parse, USB transfer, unsupported SoC. Our side, never the material.
-        case environment(String)
-        /// Exit 2: the tool's own check did not pass.
-        case checkFailed
-        case unexpected(Int32)
+    // MARK: - Reading the tool
+
+    /// The envelope every mode shares. `errorCode` non-nil means no verdict was produced.
+    private struct Envelope {
+        let pass: Bool
+        let errorCode: String?
+        let errorMessage: String?
+
+        init(_ json: [String: Any]) {
+            pass = json.bool("pass") ?? false
+            errorCode = json.str("errorCode")
+            errorMessage = json.str("errorMessage")
+        }
+
+        /// How this item ran, when the tool says no verdict was produced.
+        ///
+        /// One state, and the reason is the tool's own words. An earlier revision sorted the codes
+        /// into three execution states — `noDevice` as never-started, `ambiguousCfg` as invalid, the
+        /// rest as interrupted — but that sorting was ours, and it decided whether the report said
+        /// 跳过 or 未得结果. The tool reports one thing here: no verdict was produced. So that is
+        /// what we record, with its code and its message carried through unchanged.
+        var execution: Execution? {
+            guard let errorCode else { return nil }
+            return .interrupted(errorMessage.map { "\($0)（\(errorCode)）" } ?? errorCode)
+        }
     }
 
-    private func classify(_ exitCode: Int32) -> ToolExit {
-        switch exitCode {
-        case 0: return .ok
-        case 1: return .environment("无设备 / 解析 / USB 传输 / 不支持的 SoC")
-        case 2: return .checkFailed
-        default: return .unexpected(exitCode)
+    /// Runs one mode and settles the envelope. Returns nil when a verdict was produced and the
+    /// item should go on to fill in its own check lists.
+    private func read(_ flag: String, into r: inout ItemResult,
+                     timeout: TimeInterval = 600) async -> (json: [String: Any], mode: [String: Any])? {
+        let jr = await cli.runJSON(flag, deviceID: deviceID, timeout: timeout)
+        if let err = jr.parseError {
+            r.evidence = [.log("RockchipDDRTestUtilityCLI \(flag) --json", jr.raw)]
+            r.interrupted("工具未返回有效结果（非物料问题）：\(err)")
+            return nil
         }
+        if let ms = jr.json.int("elapsedMs"), ms > 0 {
+            r.measurements.append(.num("工具耗时", (Double(ms) / 100).rounded() / 10, "s"))
+        }
+        let envelope = Envelope(jr.json)
+        if let execution = envelope.execution {
+            r.evidence = [.log("RockchipDDRTestUtilityCLI \(flag) --json", jr.raw)]
+            r.conclude(execution)
+            return nil
+        }
+        let modeKey = String(flag.dropFirst(2))          // "--detect" → "detect"
+        return (jr.json, jr.json.dict(modeKey) ?? [:])
     }
 
     // MARK: - T01 spec verification
 
-    /// Detects the DDR part and records what it is. No criterion: whether the part is the one that
-    /// was ordered is a question for whoever holds the material spec, not for this software.
+    /// Records what the DDR part is. No criterion: whether it is the part that was ordered is a
+    /// question for whoever holds the material spec, not for this software.
     ///
-    /// The unique-cfg check is **validity**, not a criterion. A part the tool cannot match uniquely
-    /// is a part whose type, capacity and channel count are not trustworthy either — so the honest
-    /// answer is that this reading did not come out, not that the material is defective. The first
-    /// iteration was asymmetric here: a unique match recorded 仅记录 (a human judges), while a
-    /// failure to match judged 不合格 all by itself.
+    /// It adds no check of its own. A part the tool could not pin to one cfg arrives with
+    /// `errorCode: ambiguousCfg` or `cfgNotFound`, which is 未得结果 by the envelope alone — and
+    /// reading anything beyond `pass` and `errorCode` is a second opinion on a decision the tool has
+    /// already made and published.
     func runT01() async -> ItemResult {
         var r = ItemResult(code: "T01")
-        let jr = await cli.runJSON("--detect", deviceID: deviceID)
-        let evidence = Evidence.log("RockchipDDRTestUtilityCLI --detect --json", jr.raw)
+        guard let (_, det) = await read("--detect", into: &r) else { return r }
 
-        if let err = jr.parseError {
-            r.evidence = [evidence]
-            r.interrupted("探测未返回有效结果：\(err)")
-            return r
-        }
-
-        let det = jr.json.dict("detect") ?? jr.json
         if let type = det.str("type"), !type.isEmpty { r.measurements.append(.text("DDR 类型", type)) }
         if let cap = det.int("capacityMB") { r.measurements.append(.num("容量", Double(cap), "MB")) }
         if let ch = det.int("channels")    { r.measurements.append(.num("通道数", Double(ch))) }
         if let cs = det.int("csPerDie")    { r.measurements.append(.num("每 die CS 数", Double(cs))) }
-        // The evidence T01 is asked for is the matched cfg file name.
         if let cfg = det.str("cfg"), !cfg.isEmpty { r.measurements.append(.text("匹配 cfg", cfg)) }
         if let tier = det.str("tier"), !tier.isEmpty { r.measurements.append(.text("匹配方式", tier)) }
-
-        switch classify(jr.exitCode) {
-        case .ok:
-            r.validity = [.isTrue("唯一匹配配置", true, expected: "工具退出码 0")]
-            r.conclude()
-        case let .environment(why):
-            r.evidence = [evidence]
-            r.interrupted("探测环境错误（非物料问题）：\(why)")
-        case .checkFailed:
-            r.validity = [.isTrue("唯一匹配配置", false, expected: "工具退出码 0")]
-            r.evidence = [evidence]
-            r.conclude()
-        case let .unexpected(code):
-            r.evidence = [evidence]
-            r.interrupted("探测返回未知退出码 \(code)")
+        // Per-channel geometry, as the tool decoded it. Read from the structured field rather than
+        // from the log's prose, and labelled per channel so it cannot be read as the whole part.
+        if let geometry = det["geometry"] as? [[String: Any]], let first = geometry.first {
+            if let bits = first.int("busWidthBits") {
+                r.measurements.append(.num("每通道位宽", Double(bits), "bit"))
+            }
+            if let die = first.int("dieWidthBits") {
+                r.measurements.append(.num("每 die 位宽", Double(die), "bit"))
+            }
         }
+
+        // v2.7 lists every cfg that matched, by name — an ambiguous result is only actionable if the
+        // reader can see what to choose between. It was a count before.
+        let candidates = det["candidates"] as? [String] ?? []
+        if candidates.count > 1 {
+            r.measurements.append(.text("候选 cfg", candidates.joined(separator: "；")))
+        }
+
+        // No check of our own. T01 makes no claim about the material — it records what the part is
+        // — and whether the tool could pin it to one cfg is already in `errorCode` (`ambiguousCfg`,
+        // `cfgNotFound`), which the envelope has settled before we get here.
+        r.conclude()
         return r
     }
 
     // MARK: - T02 soldering
 
-    /// The device's own result code is the criterion. This one is about the material and nothing else.
+    /// The device's own verdict is the criterion. This item is about the material and nothing else.
     func runT02() async -> ItemResult {
         var r = ItemResult(code: "T02")
-        let jr = await cli.runJSON("--solder", deviceID: deviceID)
+        guard let (_, sol) = await read("--solder", into: &r) else { return r }
 
-        if let err = jr.parseError {
-            r.evidence = [.log("RockchipDDRTestUtilityCLI --solder --json", jr.raw)]
-            r.interrupted("焊接检测未返回有效结果（非物料问题）：\(err)")
-            return r
-        }
-        let sol = jr.json.dict("solder") ?? [:]
-        let log = sol.str("log") ?? jr.raw
-        let outcome = (sol.str("outcome") ?? "").uppercased()
+        // No geometry here. It used to be scraped out of the device's log with a regex over prose —
+        // ours, not the tool's — and the two numbers it produced (2048 MB, 16 bit, per die) sat in
+        // the same report as T01's whole-part figures (4096 MB, 2 channels) with nothing saying they
+        // measured different things. The tool reports geometry as structured fields on `--detect`,
+        // which is T01's job; T02's job is the solder verdict.
+        let log = sol.str("log") ?? ""
+        if let cfg = sol.str("cfg"), !cfg.isEmpty { r.measurements.append(.text("检测 cfg", cfg)) }
+        if !log.isEmpty { r.evidence = [.log("焊接检测设备输出", log)] }
 
-        // The device geometry is read from the device's own log.
-        if let size = RE.firstInt(#"Size=(\d+)MB"#, in: log) {
-            r.measurements.append(.num("检出容量", Double(size), "MB"))
-        }
-        if let bw = RE.firstInt(#"BW=(\d+)"#, in: log) {
-            r.measurements.append(.num("总线位宽", Double(bw), "bit"))
-        }
-        if !outcome.isEmpty { r.measurements.append(.text("设备判定", outcome)) }
-        r.evidence = [.log("焊接检测设备输出", log)]
-
-        switch classify(jr.exitCode) {
-        case .ok:
-            r.criteria = [.isTrue("设备 result code", true, expected: "solder.outcome 为 PASS")]
-            r.conclude()
-        case let .environment(why):
-            // Reporting a transfer problem as a failure would reject a sound board.
-            r.interrupted("USB 传输或环境错误（非物料问题）：\(sol.str("error") ?? why)")
-        case .checkFailed:
-            r.criteria = [.isTrue("设备 result code", false, expected: "solder.outcome 为 PASS")]
-            r.conclude()
-        case let .unexpected(code):
-            r.interrupted("焊接检测返回未知退出码 \(code)")
-        }
+        // Only `pass` and `errorCode`. An earlier revision gated on `solder.bootSucceeded`, having
+        // guessed what it meant — and a real AZ08 came back `pass: true, errorCode: nil, exit 0`
+        // with the log reading 测试结果: 通过! and `bootSucceeded: false`. That guess turned a board
+        // the tool had passed into 未得结果. Whatever that flag tracks, it is diagnostic; it is in
+        // `log`, where the tool puts its diagnostic prose.
+        r.criteria = [.isTrue("设备 result code", sol.bool("pass") ?? false,
+                              expected: "solder.pass 为 true")]
+        r.conclude()
         return r
     }
 
     // MARK: - T03 DQ eye scan
 
-    /// The scan's own verdict is the criterion. The two sources agreeing is validity: when the exit
-    /// code says pass and `eyescan.go` says fail, we do not know what happened and must not guess.
+    /// The scan's own verdict is the criterion, and whether it finished is validity.
+    ///
+    /// v2.7 answers both: `eyescan.completed` is false when the device was still streaming at the
+    /// deadline, and `wedged` when it stopped responding and the fixture must be replugged. Both
+    /// also carry an `errorCode`, so the envelope has usually settled the item before we get here —
+    /// these checks are the belt to that pair of braces.
+    ///
+    /// Before v2.7 this was one boolean for both, and a real AZ04A run ended after 122 s with the
+    /// transcript stopped mid eye-data and not one `all result:` line — reported as 不通过 on a board
+    /// whose eye was never measured.
     func runT03() async -> ItemResult {
         var r = ItemResult(code: "T03")
-        // No capability check is needed: a model without the eye scan never has this item.
-        let jr = await cli.runJSON("--eyescan", deviceID: deviceID, timeout: 900)
+        // No capability check: a model without the eye scan never has this item.
+        guard let (_, eye) = await read("--eyescan", into: &r, timeout: 900) else { return r }
 
-        if let err = jr.parseError {
-            r.evidence = [.log("RockchipDDRTestUtilityCLI --eyescan --json", jr.raw)]
-            r.interrupted("眼图扫描未返回有效结果（非物料问题）：\(err)")
-            return r
+        if let bytes = eye.int("bytes") {
+            r.measurements.append(.num("transcript 字节数", Double(bytes), "B"))
         }
-        let eye = jr.json.dict("eyescan") ?? [:]
-        let transcript = eye.str("transcript") ?? jr.raw
-        let go = eye.bool("go") ?? false
+        r.measurements.append(.text("扫描判定", (eye.bool("pass") ?? false) ? "pass" : "fail"))
+        if let transcript = eye.str("transcript"), !transcript.isEmpty {
+            r.evidence = [.log("DQ 眼图扫描 transcript", transcript)]
+        }
 
-        if let ms = jr.json.int("elapsedMs"), ms > 0 {
-            r.measurements.append(.num("扫描耗时", (Double(ms) / 100).rounded() / 10, "s"))
+        // `completed` and `wedged` are recorded, not gated: the tool already routes both through
+        // `errorCode` (scanIncomplete / deviceWedged), so a check here would add nothing and could
+        // only misfire — which is exactly what a guessed gate on `solder.bootSucceeded` did.
+        if let completed = eye.bool("completed") {
+            r.measurements.append(.text("扫描跑完", completed ? "是" : "否"))
         }
-        r.measurements.append(.text("扫描判定", go ? "pass" : "fail"))
-        r.evidence = [.log("DQ 眼图扫描 transcript", transcript)]
-
-        switch classify(jr.exitCode) {
-        case .ok:
-            r.validity = [.isTrue("判据来源一致", go,
-                                  expected: "退出码 0 时 eyescan.go 亦为 true")]
-            r.criteria = [.isTrue("眼图扫描判定", go,
-                                  expected: "扫描完成且所有 all result 行为 pass")]
-            r.conclude()
-        case let .environment(why):
-            r.interrupted("USB 传输或环境错误（非物料问题）：\(why)")
-        case .checkFailed:
-            r.criteria = [.isTrue("眼图扫描判定", false,
-                                  expected: "扫描完成且所有 all result 行为 pass")]
-            r.conclude()
-        case let .unexpected(code):
-            r.interrupted("眼图扫描返回未知退出码 \(code)")
-        }
+        r.criteria = [.isTrue("眼图扫描判定", eye.bool("pass") ?? false,
+                              expected: "eyescan.pass 为 true")]
+        r.conclude()
         return r
     }
-
     // MARK: - T04 and E01 flashing
 
     /// The two time-consuming stages of flashing.

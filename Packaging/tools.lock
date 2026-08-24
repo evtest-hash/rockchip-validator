@@ -1,0 +1,21 @@
+# Pinned manifest of the bundled tools. Packaging/fetch-tools.sh fetches them into Vendor/bin.
+#
+# Versions are pinned and verified by sha256 rather than tracking latest, because the reports this
+# application produces gate material entry into production and every criterion rests on these
+# tools' exit codes and structured fields. The tool versions behind a report must therefore be
+# identifiable. Tracking latest would make a build depend on whatever the remote held at fetch
+# time, breaking that chain; Google's platform-tools-latest is a rolling target, and major adb
+# versions have changed behaviour. With versions pinned, any commit builds a byte-identical .app.
+#
+# To update a tool, change the version, url and sha256 on its line and commit.
+#   Obtain the sha256 with: curl -sL <url> | shasum -a 256
+#
+# Fields: id | version | url | sha256 | members to extract, space separated, kept under their
+# original names in Vendor/bin
+#
+# libusb-1.0.0.dylib must sit in the same directory as RockchipDDRTestUtilityCLI, whose LC_RPATH
+# is @loader_path. Both ship in the same archive, which satisfies this by construction.
+
+ddr-test-utility|v2.7|https://github.com/evtest-hash/RockchipDDRTestUtility/releases/download/v2.7/RockchipDDRTestUtilityCLI-macos.tar.gz|31c6db7ac147e7455757cef65f3254e0c6e6ebbe0ac5a6834aa9bb4f05337ff0|RockchipDDRTestUtilityCLI libusb-1.0.0.dylib
+rockchip-flash-tool-cli|v0.3.0|https://github.com/evtest-hash/rockchip-flash-tool-cli/releases/download/v0.3.0/rockchip-flash-tool-cli-macos-universal2.tar.gz|d2ad0a101afb5f95dd8fd000b3c15c0d8d1f0d512f0d34741f7c1d2c8f0f56a6|rockchip-flash-tool-cli
+android-platform-tools|37.0.0|https://dl.google.com/android/repository/platform-tools_r37.0.0-darwin.zip|094a1395683c509fd4d48667da0d8b5ef4d42b2abfcd29f2e8149e2f989357c7|platform-tools/adb

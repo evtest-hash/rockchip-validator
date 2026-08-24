@@ -17,13 +17,14 @@ final class WholeFlowReportTests: XCTestCase {
 
     private func healthyTool() -> ScriptedMaskromTool {
         ScriptedMaskromTool([
-            "--detect": .init(json: ["detect": ["type": "LPDDR4X", "capacityMB": 8192,
+            "--detect": .init(json: ["detect": ["pass": true, "type": "LPDDR4X", "capacityMB": 8192,
                                                 "channels": 4, "csPerDie": 1,
-                                                "cfg": "lpddr4x_2112MHz_AZ08.cfg",
-                                                "tier": "exact"]], exitCode: 0),
-            "--solder": .init(json: ["solder": ["outcome": "PASS",
+                                                "tier": "uniqueByCoarse",
+                                                "cfg": "lpddr4x_2112MHz_AZ08.cfg"]], exitCode: 0),
+            "--solder": .init(json: ["solder": ["pass": true, "bootSucceeded": true,
                                                 "log": "Size=8192MB BW=64"]], exitCode: 0),
-            "--eyescan": .init(json: ["eyescan": ["go": true, "transcript": "all result: pass"],
+            "--eyescan": .init(json: ["eyescan": ["pass": true, "completed": true, "wedged": false,
+                                      "bytes": 40_960, "transcript": "all result: pass"],
                                       "elapsedMs": 812_300], exitCode: 0),
         ])
     }

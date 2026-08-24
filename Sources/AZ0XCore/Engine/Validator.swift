@@ -174,7 +174,7 @@ struct Validator {
 
                 board = BoardItems(adb: adb, model: plan.model,
                                    channels: state.measurementInt("T01", "通道数"),
-                                   busBitsPerChannel: state.measurementInt("T02", "总线位宽"),
+                                   busBitsPerChannel: state.measurementInt("T01", "每通道位宽"),
                                    clock: clock)
             }
 

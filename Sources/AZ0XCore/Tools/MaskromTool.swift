@@ -29,8 +29,13 @@ extension MaskromTool {
     /// Addressed by the tool's device id, whose port chain survives re-enumeration; the USB address
     /// inside it used to move between boards of one model. Stability is two identical readings, not
     /// one: a board mid-enumeration answers once and then disappears again.
+    ///
+    /// The three-second spacing is not arbitrary and was measured against hardware: two readings one
+    /// second apart are weak evidence, because a board can appear, vanish and reappear inside that
+    /// second. Shortening it makes this pass sooner and mean less.
     func settled(deviceID: String, clock: any RunClock = SystemClock(),
-                 settle: TimeInterval = 5, timeout: TimeInterval = 20) async -> Bool {
+                 settle: TimeInterval = 5, timeout: TimeInterval = 20,
+                 pollSeconds: TimeInterval = 3) async -> Bool {
         await clock.sleep(seconds: settle)
         let began = clock.now
         var seen = 0
@@ -41,7 +46,7 @@ extension MaskromTool {
             } else {
                 seen = 0
             }
-            await clock.sleep(seconds: 1)
+            await clock.sleep(seconds: pollSeconds)
         }
         return false
     }
