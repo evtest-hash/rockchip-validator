@@ -18,7 +18,7 @@ final class ScriptedMaskromTool: MaskromTool, @unchecked Sendable {
     }
 
     var answers: [String: Answer] = [:]
-    var enumerated: [DdrCli.Device] = [.init(id: "002-1.4-2207-350e-NA", pid: "350e")]
+    var enumerated: [DdrCli.Device] = [.init(id: "002-1.4-2207-350e-NA", pid: "0x350e")]
 
     private(set) var asked: [String] = []
     private(set) var unmatched: [String] = []

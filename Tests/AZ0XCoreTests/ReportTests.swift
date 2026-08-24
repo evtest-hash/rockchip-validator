@@ -65,7 +65,9 @@ final class ReportTests: XCTestCase {
             results["T05"] = t05
         })
 
-        XCTAssertTrue(md.contains("项全部通过"), "被判定的项目都通过了，这句必须还在：\n\(md)")
+        XCTAssertTrue(md.contains("已判定的"), "被判定的项目都通过了，这句必须还在：\n\(md)")
+        XCTAssertFalse(md.contains("全部通过"),
+                       "有一项没测出结果时不该说「全部」——那是在夸大覆盖面")
         XCTAssertTrue(md.contains("未取得结果"), md)
         XCTAssertTrue(md.contains("stress-ng"), "原因要写进报告，操作员才知道去修什么")
         XCTAssertTrue(md.contains("不构成物料判定"), md)

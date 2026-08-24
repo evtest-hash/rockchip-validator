@@ -183,6 +183,9 @@ struct ReportRenderer {
             rows.append(("自动判定",
                          "✅ 抽测 \(passed.count) 项：已执行项均通过 —— "
                        + "本次未覆盖完整验证序列，不构成物料导入结论"))
+        } else if !run.noResultItems.isEmpty {
+            // "全部通过" would overclaim: something was not measured, and the row below says which.
+            rows.append(("自动判定", "✅ 已判定的 \(passed.count) 项均通过"))
         } else {
             rows.append(("自动判定", "✅ \(passed.count) 项全部通过"))
         }

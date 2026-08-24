@@ -26,13 +26,26 @@ final class CoreHasNoUITests: XCTestCase {
         return (e?.compactMap { $0 as? URL } ?? []).filter { $0.pathExtension == "swift" }
     }
 
+    /// Code only. This check is about what the core *depends on*, and the comments explaining why it
+    /// must not depend on those things naturally name them — the first version of this test failed on
+    /// its own rationale.
+    private func code(of url: URL) throws -> String {
+        try String(contentsOf: url, encoding: .utf8)
+            .components(separatedBy: .newlines)
+            .map { line -> String in
+                guard let i = line.range(of: "//") else { return line }
+                return String(line[..<i.lowerBound])
+            }
+            .joined(separator: "\n")
+    }
+
     func testTheCoreImportsNoInterfaceFramework() throws {
         let sources = try coreSources()
         XCTAssertGreaterThan(sources.count, 10, "没找到核心源码，这条测试就没在检查任何东西")
 
         let forbidden = ["SwiftUI", "AppKit", "Combine"]
         for url in sources {
-            let text = try String(contentsOf: url, encoding: .utf8)
+            let text = try code(of: url)
             for framework in forbidden {
                 XCTAssertFalse(text.contains("import \(framework)"),
                                "\(url.lastPathComponent) 引入了 \(framework)。"
@@ -44,7 +57,7 @@ final class CoreHasNoUITests: XCTestCase {
     /// And no observation attributes either: those are how the coupling arrived last time.
     func testTheCoreDeclaresNoObservableState() throws {
         for url in try coreSources() {
-            let text = try String(contentsOf: url, encoding: .utf8)
+            let text = try code(of: url)
             for marker in ["@Published", "ObservableObject", "@StateObject", "@EnvironmentObject"] {
                 XCTAssertFalse(text.contains(marker),
                                "\(url.lastPathComponent) 用了 \(marker)。核心的状态由核心自己表达，"

@@ -163,4 +163,108 @@ struct MaskromItems {
         }
         return r
     }
+
+    // MARK: - T04 and E01 flashing
+
+    /// The two time-consuming stages of flashing.
+    enum FlashStage {
+        /// Downloading: bytes done and total bytes.
+        case downloading(Int64, Int64?)
+        /// Writing: percentage, or nil before the tool reports its first.
+        case flashing(Int?)
+    }
+
+    /// Flashes the latest production image from CI.
+    ///
+    /// The anti-misflash gates are **validity**, not criteria: the wrong board in the socket, or a
+    /// model that does not match the selection, is a setup problem and says nothing about the
+    /// material. They still end the run, because flashing is the one item the rest of the sequence
+    /// depends on — but that is `Flow`'s decision now, not a verdict's side effect.
+    ///
+    /// The tool's exit code is a criterion in both flows. It asserts one thing about the board in
+    /// front of us — that it accepted the production image — and that is a yes-or-no about hardware,
+    /// not a measurement. An earlier attempt filed it under validity for the DDR flow, reasoning that
+    /// the material there is the DRAM; the report then rendered T04 as 仅记录, because an item with no
+    /// criteria at all has nothing to judge. Flashing is not a measurement item, and a report that
+    /// says otherwise is worse than a classification that is arguable.
+    func runFlash(code: String, flashTool: (any Flasher)?,
+                  onStage: ((FlashStage) -> Void)? = nil) async -> ItemResult {
+        var r = ItemResult(code: code)
+
+        guard let flashTool else {
+            r.interrupted("刷机工具未随应用打包（rockchip-flash-tool-cli 缺失）")
+            return r
+        }
+
+        // Anti-misflash: this item writes to its own socket, and only if the board there is of the
+        // selected model. Other boards on the bench are none of its business.
+        guard let target = await cli.device(id: deviceID) else {
+            r.validity = [.isTrue("防误刷 · 目标设备在位", false, expected: deviceID)]
+            r.conclude()
+            return r
+        }
+        guard target.pid == model.maskromPID else {
+            r.validity = [.isTrue("防误刷 · 型号相符", false,
+                                  expected: "PID \(model.maskromPID)，实际 \(target.pid)")]
+            r.conclude()
+            return r
+        }
+        r.validity = [
+            .isTrue("防误刷 · 目标设备在位", true, expected: deviceID),
+            .isTrue("防误刷 · 型号相符", true, expected: "PID \(model.maskromPID)"),
+        ]
+
+        let meta: FlashTool.ImageMeta?
+        do { meta = try await flashTool.latestImage(for: model) }
+        catch {
+            r.interrupted("无法访问 CI 快照通道：\(error.localizedDescription)")
+            return r
+        }
+        guard let meta else {
+            r.interrupted("CI 快照通道没有 \(model.rawValue) 的镜像")
+            return r
+        }
+
+        let fetched: FlashTool.FetchedImage
+        do {
+            fetched = try await flashTool.fetch(meta) { done, total in
+                onStage?(.downloading(done, total))
+            }
+        } catch let e as FlashError {
+            // Already worded for the operator: bad URL, HTTP status, or a digest mismatch.
+            r.interrupted(e.localizedDescription)
+            return r
+        } catch {
+            r.interrupted("镜像下载失败：\(error.localizedDescription)")
+            return r
+        }
+
+        r.measurements.append(.text("镜像", meta.asset))
+        // Whether this image was proved to be the published build. Flashing an unverified one is an
+        // accepted trade-off — the digest API is rate-limited and several boards reach flashing at
+        // once — but it must not be invisible: without this line a report that flashed an unverified
+        // image reads exactly like one that flashed a verified image.
+        r.measurements.append(.text("镜像校验", fetched.digestVerified
+                                    ? "sha256 与 CI 记录一致"
+                                    : "未校验（未能取得 CI 发布摘要）"))
+
+        onStage?(.flashing(nil))
+        let res = await flashTool.flash(fetched.url, device: deviceID) { onStage?(.flashing($0)) }
+        r.measurements.append(.num("刷写耗时", (res.duration * 10).rounded() / 10, "s"))
+        if let bytes = try? FileManager.default
+            .attributesOfItem(atPath: fetched.url.path)[.size] as? Int,
+           bytes > 0, res.duration > 0 {
+            let rate = Double(bytes) / 1e6 / res.duration
+            r.measurements.append(.num("平均写入速率", (rate * 10).rounded() / 10, "MB/s"))
+        }
+
+        r.criteria.append(.equals("刷机工具退出码", Int(res.exitCode), 0))
+
+        if !res.ok {
+            // The log is required on failure, where it is diagnostic rather than write progress.
+            r.evidence = [.log("rockchip-flash-tool-cli 输出", res.combined)]
+        }
+        r.conclude()
+        return r
+    }
 }
