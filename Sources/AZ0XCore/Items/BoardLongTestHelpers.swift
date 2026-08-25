@@ -40,6 +40,12 @@ enum LongTest {
             r.interrupted("板端报告无法继续：\(why)")
             r.evidence = await evidence(from: bt)
             return r
+        case .boardGone:
+            // The item intercepts this before calling here, because reaching a verdict from it needs
+            // that item's own criteria. Arriving here means a count-bounded item forgot to, and that
+            // is said out loud rather than quietly filed as 未得结果.
+            r.invalid("板子离线未返回，但本测试项未处理这种情况")
+            return r
         case let .stopped(why):
             r.interrupted(why)
             r.evidence = await evidence(from: bt)

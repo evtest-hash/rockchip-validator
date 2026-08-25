@@ -168,6 +168,13 @@ extension BoardItems {
             }
         })
 
+        // A board that left and never came back is a verdict, not a missing result: the host, the
+        // USB ports and the operator are all given, and the board is present throughout, so what is
+        // left is a suspend it did not wake from. That is what this item measures.
+        if case let .boardGone(away, lastLog) = wait {
+            return Self.t07BoardGone(&r, lastLog: lastLog, away: away, target: targetCycles,
+                                     elapsed: Date().timeIntervalSince(started))
+        }
         // The polling outcome must be handled.
         if let bad = await LongTest.settleOrFail(wait, bt, into: &r) { return bad }
 
@@ -272,6 +279,11 @@ extension BoardItems {
             }
         })
 
+        // Same as T07: a board that stopped coming back failed to reboot, and rebooting is the whole
+        // of this item. `runT08` still removes the reboot service on the way out.
+        if case let .boardGone(away, lastLog) = wait {
+            return Self.t08BoardGone(&r, lastLog: lastLog, away: away, target: targetBoots)
+        }
         if let bad = await LongTest.settleOrFail(wait, bt, into: &r) { return bad }
 
         let progress = await bt.read("progress.log")
@@ -325,6 +337,52 @@ extension BoardItems {
     }
 
     /// Removes the reboot init service and confirms the removal.
+    /// T07's verdict when the board suspended and never came back.
+    ///
+    /// Built from the last progress this host saw rather than from the board, which cannot be read.
+    /// Nothing unknown is filled in: the checks that need a live board — whether it rebooted, what
+    /// the kernel counted — are simply absent, and the two that the absence itself decides are
+    /// stated.
+    private static func t07BoardGone(_ r: inout ItemResult, lastLog: String,
+                                     away: TimeInterval, target: Int,
+                                     elapsed: TimeInterval) -> ItemResult {
+        let cycles = RE.all(#"cycle (\d+)"#, in: lastLog).compactMap(Int.init).max() ?? 0
+        r.criteria = [
+            Check(name: "唤醒后返回", actual: "离线 \(Int(away.rounded())) s 未返回",
+                  expected: "≤ \(Thresholds.maxOfflineSeconds) s 内返回", passed: false),
+            .isTrue("跑满目标周期数", false, expected: "≥ \(target) 个周期"),
+        ]
+        r.measurements = [
+            .num("完成周期", Double(cycles)),
+            .num("要求周期数", Double(target), "次"),
+            .num("最后一次离线", away.rounded(), "s"),
+            .num("实际历时", elapsed.rounded(), "s"),
+        ]
+        r.evidence = [.log("板端 progress.log 尾部（主机最后读到的）", LongTest.tail(lastLog, 20))]
+        r.conclude()
+        return r
+    }
+
+    /// T08's verdict when the board rebooted and never came back.
+    private static func t08BoardGone(_ r: inout ItemResult, lastLog: String,
+                                     away: TimeInterval, target: Int) -> ItemResult {
+        let boots = RE.all(#"boot (\d+)"#, in: lastLog).compactMap(Int.init).max() ?? 0
+        r.criteria = [
+            // The same criterion a completed run is judged by, filled with what the host observed:
+            // the board was off the bus for longer than a reboot of it may take.
+            .lessThan("最长起回间隔", Int(away.rounded()), Thresholds.maxOfflineSeconds, unit: "s"),
+            .isTrue("跑满目标重启次数", false, expected: "≥ \(target) 次"),
+        ]
+        r.measurements = [
+            .num("重启次数", Double(boots)),
+            .num("要求重启次数", Double(target), "次"),
+            .num("最后一次离线", away.rounded(), "s"),
+        ]
+        r.evidence = [.log("板端 progress.log 尾部（主机最后读到的）", LongTest.tail(lastLog, 20))]
+        r.conclude()
+        return r
+    }
+
     private static func removeRebootService(adb: any BoardSession, dir: String, initd: String,
                                            clock: any RunClock,
                                            into r: inout ItemResult) async {

@@ -156,9 +156,19 @@ struct BoardTest {
         case done
         /// The payload said it could not continue, and why. Never a verdict on the material.
         case aborted(String)
-        /// The host stopped waiting with no terminal marker in hand, and why. Says only that no
-        /// result arrived — never anything about the material.
+        /// The board is reachable but the test is no longer set up to run, and no terminal marker
+        /// was written. Says only that no result arrived — never anything about the material,
+        /// because a payload that stopped running is a payload bug.
         case stopped(String)
+        /// The board went off the bus and did not come back. Carries the last progress this host
+        /// saw, so the item can still reach a verdict from it.
+        ///
+        /// This **is** a verdict, unlike every other way of not finishing. Under this bench's
+        /// premises nothing else can explain it: the host, the USB ports and the operator are all
+        /// given, and the board is physically present throughout. What is left is a board that
+        /// failed to come back from its own reboot or its own suspend — which is exactly what T07
+        /// and T08 exist to measure.
+        case boardGone(away: TimeInterval, lastLog: String)
         /// The operator left.
         case cancelled
     }
@@ -215,7 +225,7 @@ struct BoardTest {
                 awaySince = away
                 onOffline?(clock.now - away)
                 if clock.elapsed(since: away, exceeds: Double(Thresholds.maxOfflineSeconds)) {
-                    giveUp = "板子已离线 \(Self.spell(Double(Thresholds.maxOfflineSeconds)))未返回"
+                    return .boardGone(away: clock.now - away, lastLog: lastSeen)
                 }
             }
             if case let .untilDeclaredDuration(limit) = patience,

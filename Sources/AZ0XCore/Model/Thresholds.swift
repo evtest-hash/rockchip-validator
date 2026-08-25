@@ -43,6 +43,18 @@ enum Thresholds {
         max(1, flushInterval) * 3
     }
 
+    /// T04: how long the flashed board has to report in over adb, in seconds.
+    ///
+    /// A **criterion**, set by the owner. Flashing is not done when the tool exits 0 — it is done
+    /// when the board it wrote comes back up, and a board that never does has failed the write path
+    /// this item tests. It used to be the host's patience inside T05, where it judged nothing:
+    /// T05 is record-only and has no criteria to fail.
+    ///
+    /// Kept separate from `maxOfflineSeconds` on purpose. A first boot after flashing does one-time
+    /// initialisation that a later reboot does not, so the two are different events and their
+    /// numbers may move independently.
+    static let bootBackSeconds = 180
+
     // MARK: - Long-run scale
 
     /// Duration of one board-side long-run phase, in seconds: 12 hours.

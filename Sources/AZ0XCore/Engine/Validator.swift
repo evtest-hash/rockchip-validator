@@ -178,7 +178,12 @@ struct Validator {
                                  startedAt: startedAt, onEvent: onEvent)
                     return
                 }
-                guard await adb.waitOnline(timeout: 180, clock: clock) else {
+                // T04 already judged that this board came back, so here it is a bind, not a wait.
+                // A sequence with no flashing item addresses an already-running board, and that one
+                // still gets the full window.
+                let flashes = plan.items.contains { TestItem.flashCodes.contains($0.code) }
+                guard await adb.waitOnline(timeout: flashes ? 30 : Double(Thresholds.bootBackSeconds),
+                                           clock: clock) else {
                     if Task.isCancelled { return }
                     state.record(item, interrupted:
                         "刷机后板子 \(serial) 未在预期时间内启动并连上 adb。",
@@ -227,7 +232,7 @@ struct Validator {
         case "T02": return await maskrom.runT02()
         case "T03": return await maskrom.runT03()
         case "T04", "E01":
-            return await maskrom.runFlash(code: item.code, flashTool: flashTool) { stage in
+            var flashed = await maskrom.runFlash(code: item.code, flashTool: flashTool) { stage in
                 switch stage {
                 case let .downloading(done, total):
                     onEvent(.step(StepProgress(code: item.code, label: "下载镜像",
@@ -238,6 +243,12 @@ struct Validator {
                                                total: pct == nil ? nil : 100)))
                 }
             }
+            // Flashing is not finished when the tool exits 0; it is finished when the board it wrote
+            // comes back up. Judged here rather than in the first board item, which is record-only
+            // and so had no criterion to fail — a board that never booted used to read as "没测出
+            // 带宽" instead of "刷完起不来".
+            if flashed.verdict == .passed { await confirmBootBack(&flashed, state: state) }
+            return flashed
         default:
             guard let board else {
                 var r = ItemResult(code: item.code)
@@ -258,6 +269,31 @@ struct Validator {
                 return r
             }
         }
+    }
+
+    /// Waits for the freshly flashed board to report in, and makes that a criterion of the flash.
+    ///
+    /// Addressed by the serial read from OTP before flashing: several boards finish flashing at once
+    /// and all appear on adb together, and only the serial says which one is this bench's.
+    private func confirmBootBack(_ r: inout ItemResult, state: State) async {
+        guard let serial = state.serial else {
+            // Ours, not the material's: without the serial we cannot tell this board from another.
+            r.validity.append(.isTrue("已读到芯片 serial", false,
+                                      expected: "maskrom 阶段读出 OTP serial"))
+            r.conclude()
+            return
+        }
+        guard let adb = boardSession(serial) else {
+            r.validity.append(.isTrue("adb 随应用打包", false, expected: "Contents/Helpers/adb"))
+            r.conclude()
+            return
+        }
+        let began = clock.now
+        let up = await adb.waitOnline(timeout: Double(Thresholds.bootBackSeconds), clock: clock)
+        r.criteria.append(.isTrue("刷机后设备上线", up,
+                                  expected: "\(Thresholds.bootBackSeconds) s 内出现序列号 \(serial) 的设备"))
+        if up { r.measurements.append(.num("首次启动耗时", (clock.now - began).rounded(), "s")) }
+        r.conclude()
     }
 
     /// Pulls one item's raw board-side logs, so the report carries what a person would have copied.

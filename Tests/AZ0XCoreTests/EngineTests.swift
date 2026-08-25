@@ -86,6 +86,36 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(finished.count, 1, "finished 必须恰好发一次")
     }
 
+    // MARK: - Flashing is done when the board comes back, not when the tool exits 0
+
+    /// A board that takes the image and never boots. The write path this item tests is the whole
+    /// path, so this is a defect in the material — and it must be named on T04, which has criteria,
+    /// rather than on the first board item, which is record-only and can only say 未得结果.
+    func testAFlashedBoardThatNeverComesUpFailsT04AndStopsTheRun() async {
+        let board = ScriptedBench.board()
+        board.online = { false }
+        let (run, _) = await execute(plan(), tool: tool(), board: board)
+
+        let t04 = run.results["T04"]
+        XCTAssertTrue(t04?.condemnsMaterial == true,
+                      "\(String(describing: t04?.execution))｜\(String(describing: t04?.detail))")
+        XCTAssertTrue(t04?.criteria.contains { $0.name == "刷机后设备上线" && !$0.passed } == true,
+                      "\(t04?.criteria.map(\.name) ?? [])")
+        XCTAssertEqual(run.stoppedAt, "T04", "刷机项不通过必须停在这儿，别再往下跑板载项")
+        XCTAssertNil(run.results["T05"], "T05 不该被执行，更不该由它来背这个锅")
+    }
+
+    /// And when it does come up, the flash records how long that took.
+    func testABoardThatComesUpRecordsItsFirstBootTime() async {
+        let (run, _) = await execute(plan(), tool: tool(), board: ScriptedBench.board())
+
+        let t04 = run.results["T04"]
+        XCTAssertEqual(t04?.verdict, .passed, String(describing: t04?.detail))
+        XCTAssertTrue(t04?.criteria.contains { $0.name == "刷机后设备上线" && $0.passed } == true)
+        XCTAssertTrue(t04?.measurements.contains { $0.name == "首次启动耗时" } == true,
+                      "\(t04?.measurements.map(\.name) ?? [])")
+    }
+
     // MARK: - Sequences that cannot work are refused before a board is touched
 
     func testABoardSequenceWithoutFlashingIsRefused() async {

@@ -74,7 +74,12 @@ final class PatienceTests: XCTestCase {
                              "这一轮的累计离线必须远超单次上限，否则测不到「按段计时」")
     }
 
-    /// And a board that goes and stays gone is concluded on, at that same limit.
+    /// And a board that goes and stays gone is concluded on, at that same limit — as a **verdict**.
+    ///
+    /// Every other way of not finishing is 未得结果, and rightly so. This one is not. Under this
+    /// bench's premises the host, the USB ports and the operator are all given and the board is
+    /// physically present throughout, so a board that stopped coming back failed to reboot — which
+    /// is the whole of what T08 measures.
     func testABoardThatStaysAwayIsConcludedAtTheLimit() async {
         let clock = SimClock()
         let board = pacedBoard(records: 15, everyPolls: 1, ending: "STOP target=15")
@@ -84,12 +89,49 @@ final class PatienceTests: XCTestCase {
 
         let outcome = await waitOn(board, clock: clock)
 
-        guard case let .stopped(why) = outcome else {
+        guard case let .boardGone(away, lastLog) = outcome else {
             return XCTFail("走了不回来就该收尾：\(outcome)")
         }
-        XCTAssertTrue(why.contains("离线"), why)
+        XCTAssertGreaterThan(away, Double(Thresholds.maxOfflineSeconds))
+        XCTAssertTrue(lastLog.contains("boot"), "要带上主机最后读到的进度，判定得从它来：\(lastLog)")
         XCTAssertLessThan(clock.now - began, Double(Thresholds.maxOfflineSeconds) * 3,
                           "不该等到远超上限才收尾")
+    }
+
+    /// The item turns that into 不合格, naming the two things the absence itself decides.
+    func testT08JudgesAVanishedBoardAsDefective() async {
+        let clock = SimClock()
+        let base = ScriptedBench.board()
+        let board = pacedBoard(records: 3000, everyPolls: 1, ending: nil, onto: base)
+        var checks = 0
+        board.online = { checks += 1; return checks <= 6 }
+        let items = BoardItems(adb: board, model: .az08, channels: 4,
+                               busBitsPerChannel: 16, clock: clock)
+
+        let r = await items.runT08(targetBoots: 3_000)
+
+        XCTAssertTrue(r.condemnsMaterial, "起不来就是起不来：\(String(describing: r.execution))")
+        XCTAssertTrue(r.criteria.contains { $0.name == "最长起回间隔" && !$0.passed },
+                      "要指名是哪条判据不通过：\(r.criteria.map(\.name))")
+        XCTAssertTrue(r.criteria.contains { $0.name == "跑满目标重启次数" && !$0.passed })
+    }
+
+    /// T07 likewise: a board that suspended and never woke.
+    func testT07JudgesABoardThatNeverWokeAsDefective() async {
+        let clock = SimClock()
+        let board = ScriptedBench.board()
+        board.files["/userdata/az0x-ddr/t07_suspend/progress.log"] =
+            "1000 SUSPEND_SUCCESS start=0\n1017 cycle 1 rc=0 fail=0"
+        var checks = 0
+        board.online = { checks += 1; return checks <= 6 }
+        let items = BoardItems(adb: board, model: .az08, channels: 4,
+                               busBitsPerChannel: 16, clock: clock)
+
+        let r = await items.runT07(targetCycles: 3_000)
+
+        XCTAssertTrue(r.condemnsMaterial, String(describing: r.execution))
+        XCTAssertTrue(r.criteria.contains { $0.name == "唤醒后返回" && !$0.passed },
+                      "\(r.criteria.map(\.name))")
     }
 
     /// The limit the host waits out and the limit T08 judges by are the same number, on purpose:
