@@ -100,6 +100,29 @@ final class EngineTests: XCTestCase {
                        "拒绝要发生在碰板子之前")
     }
 
+    /// The other way to satisfy "the board must carry our test firmware": say which board already
+    /// does. Without this, re-running only the board items costs a maskrom entry and a flash each
+    /// time, which is minutes of a person's attention per attempt.
+    func testABoardOnlySequenceBindsToTheNamedBoardAndNeverWaitsForMaskrom() async {
+        var p = plan(items: TestItem.ddrItems.filter { $0.domain == .board })
+        p.boardSerial = "7413b4e0bbc37640"
+        var askedFor: String?
+        var events: [RunEvent] = []
+        let v = Validator(plan: p, tool: tool(),
+                          boardSession: { askedFor = $0; return ScriptedBench.board() },
+                          flashTool: ScriptedFlasher(), clock: SimClock())
+        let run = await v.run { events.append($0) }
+
+        XCTAssertEqual(askedFor, "7413b4e0bbc37640", "必须去连指定的那块板")
+        XCTAssertNil(run.stoppedAt, String(describing: run.results.values.first?.detail))
+        XCTAssertEqual(run.results["T06"]?.verdict, .passed)
+        XCTAssertEqual(run.results["T08"]?.verdict, .passed)
+        XCTAssertFalse(events.contains { if case .waitingForBoard = $0 { return true }
+                                         else { return false } },
+                       "序列里没有 maskrom 项，就不该去等 maskrom")
+        XCTAssertTrue(ReportRenderer.render(run).contains("抽测"), "只跑一部分必须写明是抽测")
+    }
+
     func testAnEmmcPlanIsRefusedPlainly() async {
         let (run, _) = await execute(plan(items: TestItem.emmcItems, flow: .emmc),
                                      tool: tool(), board: ScriptedBench.board())

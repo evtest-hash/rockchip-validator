@@ -42,6 +42,9 @@ public enum AZ0X {
           --model <AZ05|AZ07|AZ08|AZ04A|AZ04B>   必填
           --flow <ddr|emmc>                      默认 ddr
           --device-id <id>                       默认：当前唯一在位的那块
+          --serial <adb serial>                  只跑板载项（不含刷机项）时用：
+                                                 指定一块已刷好测试固件的板子；
+                                                 默认：当前唯一在线的那台
           --items T01,T02,…                      默认：该型号该流程的全部项目
           --out <目录>                           报告与板端日志的落地目录
           --burnin-seconds <n>                   T06 每段时长，默认 43200
@@ -106,13 +109,19 @@ public enum AZ0X {
             return fail("程序内嵌工具缺失：" + missing.joined(separator: "、"))
         }
 
+        var items = TestItem.items(for: flow, model: model)
+        if let picked = o.string("items") {
+            let wanted = Set(picked.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) })
+            items = items.filter { wanted.contains($0.code) }
+            guard !items.isEmpty else { return fail("--items 里没有该型号该流程存在的项目") }
+        }
+        let needsMaskrom = items.contains { $0.domain == .maskrom }
+
         // Which board. Naming it is required as soon as more than one is in maskrom: the whole point
         // of addressing by the tool's device id is that two boards of one model are otherwise
         // indistinguishable, and flashing the wrong one is not undoable.
-        let deviceID: String
-        if let given = o.string("device-id") {
-            deviceID = given
-        } else {
+        var deviceID = o.string("device-id") ?? ""
+        if needsMaskrom, deviceID.isEmpty {
             let devices = await cli.devices()
             guard devices.count == 1 else {
                 return fail(devices.isEmpty
@@ -122,11 +131,18 @@ public enum AZ0X {
             deviceID = devices[0].id
         }
 
-        var items = TestItem.items(for: flow, model: model)
-        if let picked = o.string("items") {
-            let wanted = Set(picked.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) })
-            items = items.filter { wanted.contains($0.code) }
-            guard !items.isEmpty else { return fail("--items 里没有该型号该流程存在的项目") }
+        // A selection with no maskrom item never sees the board there, so it is addressed by the
+        // serial it reports over adb instead. Same rule as above: one board, take it; more than
+        // one, say which.
+        var boardSerial = o.string("serial")
+        if !needsMaskrom, boardSerial == nil {
+            let online = await Adb.onlineSerials()
+            guard online.count == 1 else {
+                return fail(online.isEmpty
+                    ? "当前没有在线的 adb 板卡。板载测试要求板上已刷入我们编译的测试固件。"
+                    : "有 \(online.count) 台板卡在线，请用 --serial 指定：" + online.joined(separator: "、"))
+            }
+            boardSerial = online[0]
         }
 
         let stamp = DateFormatter()
@@ -135,7 +151,7 @@ public enum AZ0X {
 
         var plan = RunPlan(batchID: batchID, runID: UUID().uuidString, model: model, flow: flow,
                            items: items, burninPhases: Set(BurninPhase.allCases),
-                           deviceID: deviceID)
+                           deviceID: deviceID, boardSerial: boardSerial)
         if let n = o.int("burnin-seconds") { plan.burninSeconds = n }
         if let n = o.int("cycles") { plan.cycles = n }
 

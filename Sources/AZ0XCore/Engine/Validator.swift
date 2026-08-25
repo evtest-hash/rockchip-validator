@@ -10,6 +10,9 @@ struct RunPlan {
     let burninPhases: Set<BurninPhase>
     /// The maskrom tool's device id — the bus and port chain that addresses this socket.
     let deviceID: String
+    /// Serial of a board that is already running our test firmware, for a sequence that contains no
+    /// flashing item. nil in the full flow, where the serial is read out of OTP in maskrom instead.
+    var boardSerial: String?
 
     /// Durations and counts, so a bring-up run can be short without the shipping defaults moving.
     var burninSeconds: Int = Thresholds.longRunSeconds
@@ -64,29 +67,37 @@ struct Validator {
             return run
         }
 
-        onEvent(.waitingForBoard(deviceID: plan.deviceID))
-        guard await waitForBoard() else {                       // cancelled
-            let run = state.run(plan: plan)
-            onEvent(.finished(run))
-            return run
-        }
+        if plan.items.contains(where: { $0.domain == .maskrom }) {
+            onEvent(.waitingForBoard(deviceID: plan.deviceID))
+            guard await waitForBoard() else {                       // cancelled
+                let run = state.run(plan: plan)
+                onEvent(.finished(run))
+                return run
+            }
 
-        if let identity = await tool.identity(deviceID: plan.deviceID) {
-            state.serial = identity.serial
-            state.cpuid = identity.cpuid
-            state.chipVariant = identity.variant
-        }
+            if let identity = await tool.identity(deviceID: plan.deviceID) {
+                state.serial = identity.serial
+                state.cpuid = identity.cpuid
+                state.chipVariant = identity.variant
+            }
 
-        // Caught before flashing, not after: writing an image to the wrong part is not undoable.
-        if let variant = state.chipVariant, plan.model.contradicts(chipVariant: variant) {
-            let named = DeviceModel.named(byChipVariant: variant)?.rawValue ?? variant
-            state.finish(refusing: "本工位插的是 \(named) 的板子（芯片 \(variant)），"
-                                 + "与所选型号 \(plan.model.rawValue) 不符。"
-                                 + "两者 USB PID 相同，只能靠芯片 OTP 区分 —— 请换板子或改所选型号。",
-                         plan: plan, asPrecondition: true)
-            let run = state.run(plan: plan)
-            onEvent(.finished(run))
-            return run
+            // Caught before flashing, not after: writing an image to the wrong part is not undoable.
+            if let variant = state.chipVariant, plan.model.contradicts(chipVariant: variant) {
+                let named = DeviceModel.named(byChipVariant: variant)?.rawValue ?? variant
+                state.finish(refusing: "本工位插的是 \(named) 的板子（芯片 \(variant)），"
+                                     + "与所选型号 \(plan.model.rawValue) 不符。"
+                                     + "两者 USB PID 相同，只能靠芯片 OTP 区分 —— 请换板子或改所选型号。",
+                             plan: plan, asPrecondition: true)
+                let run = state.run(plan: plan)
+                onEvent(.finished(run))
+                return run
+            }
+        } else {
+            // Nothing in this sequence happens in maskrom, so there is no OTP read to take the
+            // serial from: the board named here is already running our test firmware, and reports
+            // that serial itself over adb. Only a partial selection gets here — `sequenceRefusal`
+            // keeps the full sequence starting in maskrom, where the anti-misflash gates live.
+            state.serial = plan.boardSerial
         }
 
         await runItems(&state, onEvent: onEvent)
@@ -104,8 +115,13 @@ struct Validator {
             return "eMMC 流程尚未接入本引擎。"
         }
         if plan.items.contains(where: { $0.domain == .board }),
-           !plan.items.contains(where: { TestItem.flashCodes.contains($0.code) }) {
-            return "序列不自洽：含板载测试项却不含刷机项。板载测试要求先刷入我们编译的测试固件。"
+           !plan.items.contains(where: { TestItem.flashCodes.contains($0.code) }),
+           plan.boardSerial == nil {
+            // Board items need our test firmware on the board. Normally the sequence puts it there
+            // itself; naming an already-flashed board is the other way to satisfy that, and it is
+            // what makes a board-item selection re-runnable without spending a flash on each try.
+            return "序列不自洽：含板载测试项，却既不含刷机项，也没有指定一块已刷好测试固件的板子。"
+                 + "板载测试要求板上跑着我们编译的测试固件。"
         }
         // Whether the bundled CLIs are present is the caller's business: the engine is handed the
         // tools it needs, and reaching for a global here is what made it untestable last time.
