@@ -45,13 +45,29 @@ final class ScriptedBoardSession: BoardSession, @unchecked Sendable {
     /// count rather than by a clock, so a test is deterministic without a virtual clock.
     var advance: ((ScriptedBoardSession, Int) -> Void)?
 
+    /// Everything this board was asked, and what the scenario did not cover.
+    ///
+    /// Guarded for the same reason the maskrom double is: a batch runs several benches at once, and
+    /// a double that records has to survive being used the way the real thing is.
+    private let recording = NSLock()
+    private var logStore: [String] = []
+    private var unmatchedStore: [String] = []
+    private var onlineCheckCount = 0
+    private var writtenStore: [String: String] = [:]
+
     /// Every command asked, in order.
-    private(set) var log: [String] = []
+    var log: [String] { recording.lock(); defer { recording.unlock() }; return logStore }
     /// Commands the scenario did not cover.
-    private(set) var unmatched: [String] = []
-    private(set) var onlineChecks = 0
+    var unmatched: [String] { recording.lock(); defer { recording.unlock() }; return unmatchedStore }
+    var onlineChecks: Int { recording.lock(); defer { recording.unlock() }; return onlineCheckCount }
     /// Paths written with `writeFile`, which is how the payload reaches the board.
-    private(set) var written: [String: String] = [:]
+    var written: [String: String] { recording.lock(); defer { recording.unlock() }; return writtenStore }
+
+    private func record(_ body: () -> Void) {
+        recording.lock()
+        defer { recording.unlock() }
+        body()
+    }
 
     init(serial: String = "34376b2c031e323e") {
         self.serial = serial
@@ -61,7 +77,7 @@ final class ScriptedBoardSession: BoardSession, @unchecked Sendable {
 
     func shell(_ command: String, timeout: TimeInterval) async -> ShellResult {
         advance?(self, log.count)
-        log.append(command)
+        record { logStore.append(command) }
 
         // `rm -rf` / `mkdir` / launching the payload: acknowledged, nothing to say.
         if command.hasPrefix("rm -rf") || command.hasPrefix("mkdir -p")
@@ -75,19 +91,19 @@ final class ScriptedBoardSession: BoardSession, @unchecked Sendable {
         if let answer = answers.first(where: { command.contains($0.match) }) {
             return Self.result(answer.reply)
         }
-        unmatched.append(command)
+        record { unmatchedStore.append(command) }
         return Self.result("", exitCode: 127)
     }
 
     var isOnline: Bool {
         get async {
-            onlineChecks += 1
+            record { onlineCheckCount += 1 }
             return online()
         }
     }
 
     func writeFile(_ content: String, to path: String, timeout: TimeInterval) async -> Bool {
-        written[path] = content
+        record { writtenStore[path] = content }
         return true
     }
 

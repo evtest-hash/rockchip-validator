@@ -1,8 +1,9 @@
 import Foundation
 
-/// Which boards this process is already driving.
+/// Which boards this window is already driving.
 ///
-/// A safety catch, and only that. It answers one question — is something in this process already
+/// A safety catch, and only that. It lives here rather than in the core because it is part of
+/// fanning out across boards, and fanning out is this side's job: the core runs one board. It answers one question — is something in this process already
 /// working on this board — instantly, from memory, with no I/O, and therefore with no way to fail
 /// for a reason that has nothing to do with the question. A file lock can fail on permissions, a
 /// full disk, a sandbox; that would make it a new source of faults rather than a guard against one.
@@ -11,30 +12,28 @@ import Foundation
 /// line names distinct ones, so it fires exactly when something has gone wrong: two benches aimed at
 /// one board, which for a flashing item means two writers on the same part.
 ///
-/// It coordinates nothing. Which boards run, in which batches, when — all of that is the caller's
-/// business, and nothing here queues, waits or retries. Across processes it says nothing at all;
-/// that is the operator's to manage, as agreed.
+/// It coordinates nothing — nothing here queues, waits or retries. It says nothing across processes
+/// either, and does not need to: the window is the only thing that validates material, and it is one
+/// process.
 public actor BenchRegistry {
 
-    public init() {}
-
-    private var held: Set<String> = []
+        private var held: Set<String> = []
 
     /// Takes a board, or reports that something already has it.
     ///
     /// The key is whatever addresses the board for this run: the maskrom device id for a sequence
     /// that starts there, the adb serial for one that names an already-flashed board. Two runs that
     /// address the same board the same way collide, which is the case worth catching.
-    public func take(_ key: String) -> Bool {
+    func take(_ key: String) -> Bool {
         held.insert(key).inserted
     }
 
     /// Gives a board back. Must run on every path out of a bench, or a socket that is physically
     /// free stays unusable for the rest of the session — the same fault, one level up, that a
     /// twelve-hour wall clock used to cause on the board itself.
-    public func release(_ key: String) {
+    func release(_ key: String) {
         held.remove(key)
     }
 
-    public var inUse: Set<String> { held }
+    var inUse: Set<String> { held }
 }

@@ -67,29 +67,29 @@ public extension Run {
     /// Items that produced no result at all, which is not the same as passing. The header verdict
     /// must count these: a table saying 未执行 beside a header claiming everything passed is the
     /// contradiction this record exists to make impossible.
-    public var notRunItems: [TestItem] {
+    var notRunItems: [TestItem] {
         items.filter { results[$0.code]?.execution == nil }
     }
 
     /// Items the criteria passed.
-    public var passedItems: [TestItem] { results { $0.verdict == .passed } }
+    var passedItems: [TestItem] { results { $0.verdict == .passed } }
 
     /// Items the criteria condemned. Nothing else belongs here.
-    public var notPassedItems: [TestItem] { results { $0.condemnsMaterial } }
+    var notPassedItems: [TestItem] { results { $0.condemnsMaterial } }
 
     /// Items measured with no criterion implemented for them. Nothing is pending on these inside
     /// the app: the report lists their readings and says so.
-    public var recordOnlyItems: [TestItem] { results { $0.verdict == .noCriterion } }
+    var recordOnlyItems: [TestItem] { results { $0.verdict == .noCriterion } }
 
     /// Items that ran but reached no conclusion — our environment, our tooling, or a board that
     /// could not be read. Never a statement about the material.
-    public var noResultItems: [TestItem] {
+    var noResultItems: [TestItem] {
         results { $0.execution.map { !$0.isCompleted } ?? false }
     }
 
     /// Burn-in segments the board actually completed, read back from T06's own measurement.
     /// nil when T06 did not run or did not report it.
-    public var ranBurninPhases: Int? {
+    var ranBurninPhases: Int? {
         guard let m = results["T06"]?.measurements.first(where: { $0.name == "执行段数" }),
               case let .number(v, _) = m.value else { return nil }
         return Int(v)
@@ -97,12 +97,12 @@ public extension Run {
 
     /// A partial run is a different document, so this decides a title, a warning and a file name —
     /// all three from here, or they contradict each other.
-    public var isPartial: Bool {
+    var isPartial: Bool {
         if TestItem.isPartial(items, flow: flow, model: model,
                               burninPhases: burninPhases.count) { return true }
         return (ranBurninPhases ?? BurninPhase.allCases.count) < BurninPhase.allCases.count
     }
 
     /// How this board is named on disk: the serial once read, the socket before that.
-    public var boardName: String { board.serial ?? board.socket }
+    var boardName: String { board.serial ?? board.socket }
 }

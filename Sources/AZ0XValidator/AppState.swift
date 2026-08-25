@@ -121,8 +121,7 @@ final class AppState: ObservableObject {
 
     /// Starts a batch on exactly the boards ticked here; nothing afterwards changes that.
     func startBatch(root: URL = ArchiveRoot.default) {
-        let boards = candidates.filter { confirmed.contains($0.deviceID) }
-            .map { BoardAddress.maskrom($0.deviceID) }
+        let boards = candidates.filter { confirmed.contains($0.deviceID) }.map(\.deviceID)
         guard !boards.isEmpty, !resolvedItems.isEmpty else { return }
 
         let stamp = DateFormatter()
@@ -130,50 +129,62 @@ final class AppState: ObservableObject {
         let batchID = "\(model.rawValue)-\(flow == .ddr ? "DDR" : "EMMC")-\(stamp.string(from: Date()))"
         let folder = root.appendingPathComponent(batchID, isDirectory: true)
 
-        let plan = BatchPlan(batchID: batchID, model: model, flow: flow,
-                             items: resolvedItems, burninPhases: burninPhases, boards: boards)
-        let batch = Batch(plan: plan, folder: folder)
+        let batch = Batch(batchID: batchID, model: model, flow: flow, items: resolvedItems,
+                          burninPhases: burninPhases, deviceIDs: boards, folder: folder)
         batches.append(batch)
         confirmed = []
         screen = .console
 
-        drive(batch)
+        for bench in batch.benches { drive(bench, in: batch) }
     }
 
-    /// Hands the batch to the core and folds what comes back into observable state.
+    /// Runs one board, and gives its socket back afterwards.
     ///
-    /// The engine emits and forgets; everything main-actor stops here.
-    private func drive(_ batch: Batch) {
-        guard let runner = BatchRunner.live(plan: batch.plan, registry: registry,
-                                            folder: batch.folder) else { return }
-        Task { [weak self] in
-            _ = await runner.run { event in
-                Task { @MainActor [weak self] in self?.receive(event, in: batch) }
+    /// This is the fan-out, and it lives here because it is policy: which boards, grouped how, when.
+    /// The core runs one board and knows nothing about batches. It used to hold this loop, which
+    /// bought one thing this window already had — a shared image download, since it is one process —
+    /// and cost three classes of concurrency defect.
+    ///
+    /// Events reach the main actor through a stream, in the order the engine produced them. Not a
+    /// task per event: tasks have no ordering guarantee, and an item's result arriving after the next
+    /// item had started would overwrite what is running with stale state.
+    private func drive(_ bench: Bench, in batch: Batch) {
+        let dir = batch.folder.map {
+            $0.appendingPathComponent(bench.deviceID, isDirectory: true)
+        }
+        if let dir {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        guard let validator = Validator.live(plan: bench.plan, archiveFolder: dir) else { return }
+
+        var yield: AsyncStream<RunEvent>.Continuation!
+        let events = AsyncStream<RunEvent> { yield = $0 }
+        let send = yield!
+
+        Task { @MainActor [weak self] in
+            for await event in events { bench.apply(event) }
+            self?.finish(bench, folder: dir)
+            await self?.registry.release(bench.deviceID)
+            await self?.scan()          // its socket is free now
+        }
+        Task {
+            // The safety catch: two benches on one board would be two writers on one part. Normal
+            // operation never reaches it — a board already running is absent from the list above.
+            guard await registry.take(bench.deviceID) else {
+                await MainActor.run { bench.refuse("本窗口已有另一个工位正在验这块板") }
+                send.finish()
+                return
             }
-            await self?.scan()          // a finished batch has given its sockets back
+            _ = await validator.run { send.yield($0) }
+            send.finish()
         }
     }
 
-    private func receive(_ event: BatchEvent, in batch: Batch) {
-        switch event {
-        case let .refused(board, why):
-            batch.bench(board)?.refuse(why)
-        case let .benchStarted(board):
-            batch.bench(board)?.startedAt = Date()
-        case let .bench(board, e):
-            batch.bench(board)?.apply(e)
-        case let .benchFinished(board, run, folder):
-            guard let bench = batch.bench(board) else { return }
-            bench.apply(.finished(run))
-            bench.runFolder = folder
-            // Written here rather than in the engine: rendering is presentation, and the same
-            // function writes it for the command line.
-            if let folder {
-                if let url = RunStore.write(run, into: folder) { bench.reportURL = url }
-                else { bench.reportError = "无法写入 \(folder.lastPathComponent)" }
-            }
-        case .finished:
-            break
-        }
+    /// Writes the record and the report once a board has finished.
+    private func finish(_ bench: Bench, folder: URL?) {
+        guard let run = bench.run, let folder else { return }
+        bench.runFolder = folder
+        if let url = RunStore.write(run, into: folder) { bench.reportURL = url }
+        else { bench.reportError = "无法写入 \(folder.lastPathComponent)" }
     }
 }

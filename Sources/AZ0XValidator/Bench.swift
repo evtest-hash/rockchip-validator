@@ -17,8 +17,10 @@ final class Bench: ObservableObject, Identifiable {
     }
 
     let id = UUID()
-    /// How this board is addressed. The two domains do not share an identifier.
-    let address: BoardAddress
+    /// Addresses this board in maskrom: the tool's device id, whose first two parts name the socket.
+    let deviceID: String
+    /// What to run on it. Handed to the core, which runs exactly one board.
+    let plan: RunPlan
     let model: DeviceModel
     let flow: ValidationFlow
     let items: [TestItem]
@@ -54,16 +56,17 @@ final class Bench: ObservableObject, Identifiable {
     /// Which item the long progress belongs to.
     private var longCode: String?
 
-    init(address: BoardAddress, model: DeviceModel, flow: ValidationFlow, items: [TestItem]) {
-        self.address = address
-        self.model = model
-        self.flow = flow
-        self.items = items
+    init(deviceID: String, plan: RunPlan) {
+        self.deviceID = deviceID
+        self.plan = plan
+        self.model = plan.model
+        self.flow = plan.flow
+        self.items = plan.items
     }
 
     // MARK: - What the views ask of it
 
-    var portChain: String { address.socket }
+    var portChain: String { deviceID.split(separator: "-").prefix(2).joined(separator: "-") }
     var title: String {
         "\(model.displayName) · \(flow.displayName) · \(serial ?? "插座 \(portChain)")"
     }
@@ -165,6 +168,10 @@ final class Bench: ObservableObject, Identifiable {
         }
     }
 
+    /// This window refused to start the board, so it shows with a reason and no record.
+    ///
+    /// Nothing ran, so there is nothing to write: a report for a board that never started would be
+    /// a document about nothing. The console and the summary read this through `ending`.
     func refuse(_ why: String) {
         refusedWhy = why
         isFinished = true
@@ -182,28 +189,36 @@ final class Bench: ObservableObject, Identifiable {
 final class Batch: ObservableObject, Identifiable {
 
     let id = UUID()
-    let plan: BatchPlan
+    let batchID: String
+    let model: DeviceModel
+    let flow: ValidationFlow
+    let items: [TestItem]
+    let burninPhases: Set<BurninPhase>
+    let folder: URL?
     let startedAt: Date
     /// Formatted once: the console redraws every second and this cannot change.
     let startedText: String
     @Published var benches: [Bench]
-    @Published var folder: URL?
 
-    init(plan: BatchPlan, folder: URL?) {
-        self.plan = plan
+    init(batchID: String, model: DeviceModel, flow: ValidationFlow, items: [TestItem],
+         burninPhases: Set<BurninPhase>, deviceIDs: [String], folder: URL?) {
+        self.batchID = batchID
+        self.model = model
+        self.flow = flow
+        self.items = items
+        self.burninPhases = burninPhases
         self.folder = folder
         self.startedAt = Date()
         self.startedText = operatorStamp.string(from: Date())
-        self.benches = plan.boards.map {
-            Bench(address: $0, model: plan.model, flow: plan.flow, items: plan.items)
+        self.benches = deviceIDs.map { id in
+            Bench(deviceID: id,
+                  plan: RunPlan(batchID: batchID, model: model, flow: flow, items: items,
+                                burninPhases: burninPhases, deviceID: id))
         }
     }
 
-    var model: DeviceModel { plan.model }
-    var flow: ValidationFlow { plan.flow }
-
-    func bench(_ address: BoardAddress) -> Bench? {
-        benches.first { $0.address == address }
+    func bench(_ deviceID: String) -> Bench? {
+        benches.first { $0.deviceID == deviceID }
     }
 
     var finishedCount: Int { benches.filter(\.isFinished).count }
@@ -213,16 +228,15 @@ final class Batch: ObservableObject, Identifiable {
     /// A partial batch states its scope; it cannot conclude that the material may be imported. The
     /// same rule the report's title and file name use, so the three cannot disagree.
     var isPartial: Bool {
-        TestItem.isPartial(plan.items, flow: plan.flow, model: plan.model,
-                           burninPhases: plan.burninPhases.count)
+        TestItem.isPartial(items, flow: flow, model: model, burninPhases: burninPhases.count)
     }
 
     var scopeText: String {
         var parts: [String] = []
-        let full = TestItem.items(for: plan.flow, model: plan.model).count
-        if plan.items.count < full { parts.append("\(plan.items.count)/\(full) 项") }
-        if plan.burninPhases.count < BurninPhase.allCases.count {
-            parts.append("拷机 \(plan.burninPhases.count)/\(BurninPhase.allCases.count) 段")
+        let full = TestItem.items(for: flow, model: model).count
+        if items.count < full { parts.append("\(items.count)/\(full) 项") }
+        if burninPhases.count < BurninPhase.allCases.count {
+            parts.append("拷机 \(burninPhases.count)/\(BurninPhase.allCases.count) 段")
         }
         return parts.joined(separator: " · ")
     }

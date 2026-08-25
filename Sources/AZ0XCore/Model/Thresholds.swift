@@ -5,6 +5,14 @@ public enum Thresholds {
 
     // MARK: - Board-side progress
 
+    /// How long a bench waits for its own board to appear on the bus, in seconds.
+    ///
+    /// The board was enumerated when the batch was configured and claimed before this bench began,
+    /// so this only has to cover re-enumeration jitter — the same allowance a board already gets
+    /// between two maskrom items. Exhausting it means the board left, which is a precondition, not
+    /// a fault of the material.
+    static let maskromWaitSeconds: TimeInterval = 20
+
     /// Window within which a board-side script must prove it is running, in seconds.
     public static let startupGraceSeconds = 20
 

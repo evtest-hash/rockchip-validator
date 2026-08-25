@@ -1,23 +1,43 @@
 import Foundation
 
 /// What to validate. Chosen once, then fixed for the run's life.
-struct RunPlan {
-    let batchID: String
-    let runID: String
-    let model: DeviceModel
-    let flow: ValidationFlow
-    let items: [TestItem]
-    let burninPhases: Set<BurninPhase>
+public struct RunPlan {
+    public let batchID: String
+    public let runID: String
+    public let model: DeviceModel
+    public let flow: ValidationFlow
+    public let items: [TestItem]
+    public let burninPhases: Set<BurninPhase>
     /// The maskrom tool's device id — the bus and port chain that addresses this socket.
-    let deviceID: String
+    public let deviceID: String
     /// Serial of a board that is already running our test firmware, for a sequence that contains no
     /// flashing item. nil in the full flow, where the serial is read out of OTP in maskrom instead.
-    var boardSerial: String?
+    public var boardSerial: String?
 
     /// Durations and counts, so a bring-up run can be short without the shipping defaults moving.
-    var burninSeconds: Int = Thresholds.longRunSeconds
-    var cycles: Int = Thresholds.longRunCycles
-    var emmcTargetN: Int = Thresholds.emmcTargetN
+    public var burninSeconds: Int = Thresholds.longRunSeconds
+    public var cycles: Int = Thresholds.longRunCycles
+    public var emmcTargetN: Int = Thresholds.emmcTargetN
+
+    public init(batchID: String, runID: String = UUID().uuidString,
+                model: DeviceModel, flow: ValidationFlow,
+                items: [TestItem], burninPhases: Set<BurninPhase>,
+                deviceID: String, boardSerial: String? = nil,
+                burninSeconds: Int = Thresholds.longRunSeconds,
+                cycles: Int = Thresholds.longRunCycles,
+                emmcTargetN: Int = Thresholds.emmcTargetN) {
+        self.batchID = batchID
+        self.runID = runID
+        self.model = model
+        self.flow = flow
+        self.items = items
+        self.burninPhases = burninPhases
+        self.deviceID = deviceID
+        self.boardSerial = boardSerial
+        self.burninSeconds = burninSeconds
+        self.cycles = cycles
+        self.emmcTargetN = emmcTargetN
+    }
 }
 
 /// What the engine tells whoever is watching. A caller maps these to whatever it needs —
@@ -43,7 +63,7 @@ public enum RunEvent {
 /// Everything it touches is injected, so the whole sequence can be exercised against a declared
 /// board — which is the only way the decisions in here are reachable at all: on real hardware one
 /// pass costs upwards of sixty hours.
-struct Validator {
+public struct Validator {
 
     let plan: RunPlan
     let tool: any MaskromTool
@@ -54,9 +74,22 @@ struct Validator {
     /// Where board-side logs are pulled to. nil skips archiving.
     var archiveFolder: URL?
 
+    /// The bench as it ships: the bundled tools, real adb, real flashing.
+    ///
+    /// One board, one record. Running several boards at once is the caller's to arrange — the
+    /// window does it with a task group over several of these. That used to live in here, which
+    /// bought one thing the window already had for free and cost three classes of concurrency
+    /// defect; see docs/decisions.md.
+    public static func live(plan: RunPlan, archiveFolder: URL?) -> Validator? {
+        guard let cli = DdrCli() else { return nil }
+        return Validator(plan: plan, tool: cli,
+                         boardSession: { Adb(serial: $0) },
+                         flashTool: FlashTool(), archiveFolder: archiveFolder)
+    }
+
     // MARK: - Running
 
-    func run(onEvent: @escaping (RunEvent) -> Void) async -> Run {
+    public func run(onEvent: @escaping (RunEvent) -> Void) async -> Run {
         var state = State(plan: plan)
 
         // A sequence that cannot work is refused before a board is touched, not halfway through.
@@ -69,7 +102,15 @@ struct Validator {
 
         if plan.items.contains(where: { $0.domain == .maskrom }) {
             onEvent(.waitingForBoard(deviceID: plan.deviceID))
-            guard await waitForBoard() else {                       // cancelled
+            guard await waitForBoard() else {
+                // Cancelled, or the board is not there. Either way nothing was measured, and a board
+                // that has gone says nothing about the material on it.
+                if !Task.isCancelled {
+                    state.finish(refusing: "板卡 \(plan.deviceID) 不在 maskrom。"
+                                         + "配置本批次时它在位，现在总线上找不到它 —— "
+                                         + "请检查线缆与插座，或重新按入 maskrom。",
+                                 plan: plan, asPrecondition: true)
+                }
                 let run = state.run(plan: plan)
                 onEvent(.finished(run))
                 return run
@@ -128,11 +169,25 @@ struct Validator {
         return nil
     }
 
-    /// Polls until this bench's own board is enumerated. No limit: putting a board into maskrom is
-    /// a manual step and the operator is standing there.
+    /// Waits for this bench's own board to be enumerated, briefly.
+    ///
+    /// Bounded, unlike the first version of this. That one waited without limit, on the reasoning
+    /// that putting a board into maskrom is a manual step and the operator is standing there — true
+    /// of a flow where you started the program and then pressed the button. A batch does not work
+    /// that way: a board is named because it was already listed, and claimed before its bench
+    /// started. If it is not on the bus now, it left.
+    ///
+    /// The unlimited version turned one absent board into a batch that never ends. Its other boards
+    /// finished, wrote their reports, released their sockets — and `az0x run` still did not return,
+    /// found on a two-board run where one board dropped off the bus mid-way.
+    ///
+    /// The window only has to cover re-enumeration jitter, so it is the same one a board gets
+    /// between items.
     private func waitForBoard() async -> Bool {
+        let began = clock.now
         while !Task.isCancelled {
             if await tool.device(id: plan.deviceID) != nil { return true }
+            if clock.elapsed(since: began, exceeds: Thresholds.maskromWaitSeconds) { return false }
             await clock.sleep(seconds: 1.5)
         }
         return false

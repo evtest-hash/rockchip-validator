@@ -30,7 +30,9 @@ public enum AZ0X {
     }
 
     private static let usage = """
-        az0x —— AZ0X 物料验证执行台
+        az0x —— AZ0X 物料验证执行台（一次一块板）
+
+        这是联机调试用的入口。操作员用界面做验证；多块板同时跑由界面安排。
 
         用法：
           az0x devices [--model AZ08]         列出当前处于 maskrom 的板卡
@@ -41,13 +43,13 @@ public enum AZ0X {
         run 的选项：
           --model <AZ05|AZ07|AZ08|AZ04A|AZ04B>   必填
           --flow <ddr|emmc>                      默认 ddr
-          --device-id <id>                       可重复，一块板一个；默认：当前唯一在位的那块
+          --device-id <id>                       默认：当前唯一在位的那块
           --serial <adb serial>                  只跑板载项（不含刷机项）时用：
                                                  指定一块已刷好测试固件的板子；
                                                  默认：当前唯一在线的那台
           --items T01,T02,…                      默认：该型号该流程的全部项目
-          --out <目录>                           批次落地的根目录
-                                                 默认 ~/Documents/AZ0X 物料验证/
+          --out <目录>                           报告与记录的落地目录
+          --batch <批次号>                       盖在记录与报告名上，默认按型号-流程-时间戳
           --burnin-seconds <n>                   T06 每段时长，默认 43200
           --cycles <n>                           T07/T08 次数，默认 3000
           --keep-board-logs                      保留运行中拉下来的板端原始日志目录；
@@ -137,116 +139,84 @@ public enum AZ0X {
         }
         let needsMaskrom = items.contains { $0.domain == .maskrom }
 
-        // Which boards. Naming them is required as soon as more than one is in maskrom: the whole
-        // point of addressing by the tool's device id is that two boards of one model are otherwise
-        // indistinguishable, and flashing the wrong one is not undoable.
-        //
-        // There is deliberately no --all or --count. Both would mean this program knows which boards
-        // are free, and it does not: another invocation may be driving one, and nothing here can see
-        // across processes. Naming them is the only honest way.
-        var boards: [BoardAddress] = []
+        // Which board. One per invocation: this program's job is one board's sequence, and
+        // running several at once is the caller's to arrange — which for the product means the
+        // window, the only thing an operator uses. Fanning out used to live in here; see
+        // docs/decisions.md for what that cost.
+        var deviceID = ""
+        var boardSerial: String?
         if needsMaskrom {
-            let named = o.strings("device-id")
-            if named.isEmpty {
+            if let given = o.string("device-id") {
+                deviceID = given
+            } else {
                 let devices = await cli.devices()
                 guard devices.count == 1 else {
                     return fail(devices.isEmpty
                         ? "当前没有处于 maskrom 的板卡。"
-                        : "有 \(devices.count) 块板在位，请用 --device-id 逐块指定；`az0x devices` 可列出。")
+                        : "有 \(devices.count) 块板在位，请用 --device-id 指定；`az0x devices` 可列出。")
                 }
-                boards = [.maskrom(devices[0].id)]
-            } else {
-                boards = named.map { .maskrom($0) }
+                deviceID = devices[0].id
             }
         } else {
             // A selection with no maskrom item never sees the board there, so it is addressed by
             // the serial it reports over adb instead.
-            let named = o.strings("serial")
-            if named.isEmpty {
+            if let given = o.string("serial") {
+                boardSerial = given
+            } else {
                 let online = await Adb.onlineSerials()
                 guard online.count == 1 else {
                     return fail(online.isEmpty
                         ? "当前没有在线的 adb 板卡。板载测试要求板上已刷入我们编译的测试固件。"
                         : "有 \(online.count) 台板卡在线，请用 --serial 指定：" + online.joined(separator: "、"))
                 }
-                boards = [.flashed(serial: online[0])]
-            } else {
-                boards = named.map { .flashed(serial: $0) }
+                boardSerial = online[0]
             }
         }
 
         let stamp = DateFormatter()
         stamp.dateFormat = "yyyyMMdd-HHmmss"
-        let batchID = "\(model.rawValue)-\(flow == .ddr ? "DDR" : "EMMC")-\(stamp.string(from: Date()))"
+        let batchID = o.string("batch")
+            ?? "\(model.rawValue)-\(flow == .ddr ? "DDR" : "EMMC")-\(stamp.string(from: Date()))"
 
-        var plan = BatchPlan(batchID: batchID, model: model, flow: flow, items: items,
-                             burninPhases: Set(BurninPhase.allCases), boards: boards)
+        var plan = RunPlan(batchID: batchID, model: model, flow: flow, items: items,
+                           burninPhases: Set(BurninPhase.allCases),
+                           deviceID: deviceID, boardSerial: boardSerial)
         if let n = o.int("burnin-seconds") { plan.burninSeconds = n }
         if let n = o.int("cycles") { plan.cycles = n }
 
-        let root = o.string("out").map { URL(fileURLWithPath: $0, isDirectory: true) }
-            ?? ArchiveRoot.default
-        let folder = root.appendingPathComponent(batchID, isDirectory: true)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let out = o.string("out").map { URL(fileURLWithPath: $0, isDirectory: true) }
+        if let out { try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true) }
 
-        let runner = BatchRunner(
-            plan: plan, registry: BenchRegistry(),
-            makeValidator: { runPlan, dir in
-                Validator(plan: runPlan, tool: cli, boardSession: { Adb(serial: $0) },
-                          flashTool: FlashTool(), archiveFolder: dir)
-            },
-            folder: folder)
-
-        let console = Console(many: boards.count > 1)
-        let keepLogs = o.has("keep-board-logs")
-        let runs = await runner.run { event in
-            console.show(event)
-            if case let .benchFinished(_, run, dir) = event, let dir {
-                // The board-side logs are pulled while the run is in flight so they can be looked at
-                // then. What the verdicts rest on is already in the record, so the delivered folder
-                // is a report and a record, nothing else.
-                if !keepLogs { try? FileManager.default.removeItem(at: dir.appendingPathComponent("logs")) }
-                RunStore.write(run, into: dir)
-            }
-        }
-        print("批次目录：\(folder.path)")
-
-        // A defective material is not a failure of this program: it ran and reported. Only a batch
-        // that could not produce a single record exits non-zero.
-        return runs.contains { !$0.results.isEmpty } ? 0 : 1
-    }
-
-    /// Prints one line per event, prefixed by the board once a batch has more than one.
-    ///
-    /// Progress arrives many times a second; a line identical to the last is dropped. Without that,
-    /// flashing filled the terminal with identical lines and a long run buried the item results
-    /// between them.
-    private final class Console: @unchecked Sendable {
-        private let many: Bool
-        private var lastLine = ""
-        init(many: Bool) { self.many = many }
-
-        func show(_ event: BatchEvent) {
-            switch event {
-            case let .refused(board, why):
-                emit("⚠ \(board.display) 未开始：\(why)")
-            case let .benchStarted(board):
-                if many { emit("▷ \(board.display)") }
-            case let .bench(board, e):
-                emit((many ? "[\(board.display)] " : "") + AZ0X.line(for: e))
-            case let .benchFinished(board, run, _):
-                let where_ = run.stoppedAt.map { "，终止于 \($0)" } ?? ""
-                emit("■ \(board.display) 结束\(where_)")
-            case .finished:
-                break
-            }
+        guard let validator = Validator.live(plan: plan, archiveFolder: out) else {
+            return fail("程序内嵌工具缺失")
         }
 
-        private func emit(_ line: String) {
+        // Progress arrives many times a second; only a line that says something new is printed.
+        // The engine calls this back synchronously and in order, so nothing here has to keep order.
+        var lastLine = ""
+        let run = await validator.run { event in
+            let line = AZ0X.line(for: event)
             guard line != lastLine else { return }
             lastLine = line
             print(line)
         }
+
+        if let out {
+            // The board-side logs are pulled while the run is in flight so they can be looked at
+            // then. What the verdicts rest on is already in the record, so the delivered folder is
+            // a report and a record, nothing else.
+            if !o.has("keep-board-logs") {
+                try? FileManager.default.removeItem(at: out.appendingPathComponent("logs"))
+            }
+            if let url = RunStore.write(run, into: out) { print("报告：\(url.path)") }
+        } else {
+            print("")
+            print(ReportRenderer.render(run))
+        }
+
+        // A defective material is not a failure of this program: it ran and reported. Only a run
+        // that could not produce a record exits non-zero.
+        return run.results.isEmpty ? 1 : 0
     }
 
     /// One line per event. Deliberately plain: this is a log, not an interface.

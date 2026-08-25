@@ -86,6 +86,59 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(finished.count, 1, "finished 必须恰好发一次")
     }
 
+    // MARK: - The callback is ordered by construction
+
+    /// One run, one producer, one consumer, called synchronously — so a caller never has to keep
+    /// order itself, and cannot get it wrong.
+    ///
+    /// This was not free before. Fanning out several boards inside the core meant funnelling their
+    /// events together, and the first attempt did that with a task per event: tasks have no ordering
+    /// guarantee, so `▶ T03` printed before `T02 未得结果` on the first two-board run, and applying
+    /// them to observable state let a finished item overwrite the one that had just started. Running
+    /// one board here removes the funnel, and with it that whole class of mistake.
+    func testEventsArriveInTheOrderTheyHappened() async {
+        var seen: [String] = []
+        let v = Validator(plan: plan(), tool: tool(),
+                          boardSession: { _ in ScriptedBench.board() },
+                          flashTool: ScriptedFlasher(), clock: SimClock())
+        _ = await v.run { event in
+            switch event {
+            case let .itemStarted(item):        seen.append("▶\(item.code)")
+            case let .itemFinished(item, _):    seen.append("■\(item.code)")
+            default: break
+            }
+        }
+
+        // Every item's own finish follows its own start, with nothing between them.
+        for (i, mark) in seen.enumerated() where mark.hasPrefix("■") {
+            XCTAssertEqual(seen[i - 1], "▶" + mark.dropFirst(),
+                           "顺序错了：\(seen)")
+        }
+        XCTAssertFalse(seen.isEmpty)
+    }
+
+    // MARK: - A board that is not there
+
+    /// The wait for a board used to have no limit, on the reasoning that pressing maskrom is a
+    /// manual step with the operator standing there. A batch does not work that way: a board is
+    /// named because it was already listed, and claimed before its bench began.
+    ///
+    /// Found on a two-board run where one board dropped off the bus: the other finished, wrote its
+    /// report and released its socket, and `az0x run` still did not return.
+    func testABoardThatIsNotOnTheBusEndsItsBenchInsteadOfWaitingForEver() async {
+        var p = plan()
+        p = RunPlan(batchID: p.batchID, runID: p.runID, model: p.model, flow: p.flow,
+                    items: p.items, burninPhases: p.burninPhases,
+                    deviceID: "002-9.9-2207-350e-NA")      // never enumerated
+        let (run, _) = await execute(p, tool: tool(), board: ScriptedBench.board())
+
+        XCTAssertNotNil(run.finishedAt, "整轮必须结束，不能永远等下去")
+        let first = run.results[TestItem.ddrItems.first!.code]
+        XCTAssertFalse(first?.condemnsMaterial ?? true, "板子不在，说明不了物料任何事")
+        XCTAssertTrue(first?.detail?.contains("不在 maskrom") == true,
+                      String(describing: first?.detail))
+    }
+
     // MARK: - Flashing is done when the board comes back, not when the tool exits 0
 
     /// A board that takes the image and never boots. The write path this item tests is the whole
