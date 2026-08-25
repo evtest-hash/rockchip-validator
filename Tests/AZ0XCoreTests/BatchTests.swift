@@ -135,7 +135,7 @@ final class BatchTests: XCTestCase {
 
         XCTAssertEqual(runs.count, 1, "拿不到的那块不跑，拿得到的照跑")
         let refusals = events.compactMap { e -> String? in
-            if case let .refused(board, _) = e { return board } else { return nil }
+            if case let .refused(board, _) = e { return board.display } else { return nil }
         }
         XCTAssertEqual(refusals, ["插座 002-1.5"],
                        "少跑一块板绝不能是静默的——旧版正是这样把四块变成三块")

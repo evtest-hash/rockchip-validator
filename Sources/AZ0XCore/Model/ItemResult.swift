@@ -1,17 +1,17 @@
 import Foundation
 
 /// A recorded measurement. Always recorded, never a judgement.
-struct Measurement: Identifiable, Codable, Equatable {
-    let name: String
-    let value: Value
-    var id: String { name }
+public struct Measurement: Identifiable, Codable, Equatable {
+    public let name: String
+    public let value: Value
+    public var id: String { name }
 
-    enum Value: Codable, Equatable {
+    public enum Value: Codable, Equatable {
         case number(Double, unit: String?)
         case text(String)
 
         /// Presentation text shared by the report and the interface.
-        var display: String {
+        public var display: String {
             switch self {
             case let .number(v, unit):
                 let s = v == v.rounded() && abs(v) < 1e15
@@ -24,65 +24,65 @@ struct Measurement: Identifiable, Codable, Equatable {
         }
     }
 
-    static func num(_ name: String, _ v: Double, _ unit: String? = nil) -> Measurement {
+    public static func num(_ name: String, _ v: Double, _ unit: String? = nil) -> Measurement {
         Measurement(name: name, value: .number(v, unit: unit))
     }
-    static func text(_ name: String, _ v: String) -> Measurement {
+    public static func text(_ name: String, _ v: String) -> Measurement {
         Measurement(name: name, value: .text(v))
     }
 }
 
 /// One named check, in either of the two lists on `ItemResult`.
-struct Check: Identifiable, Codable, Equatable {
-    let name: String
-    let actual: String
+public struct Check: Identifiable, Codable, Equatable {
+    public let name: String
+    public let actual: String
     /// Human-readable description of the expectation, for example "= 0" or "≥ 1".
-    let expected: String
-    let passed: Bool
-    var id: String { name }
+    public let expected: String
+    public let passed: Bool
+    public var id: String { name }
 
     /// How this check reads when it is the one that decided the item's conclusion.
-    var sentence: String { "\(name)：实测 \(actual)，要求 \(expected)" }
+    public var sentence: String { "\(name)：实测 \(actual)，要求 \(expected)" }
 
-    static func equals(_ name: String, _ actual: Int, _ want: Int) -> Check {
+    public static func equals(_ name: String, _ actual: Int, _ want: Int) -> Check {
         Check(name: name, actual: String(actual), expected: "= \(want)", passed: actual == want)
     }
-    static func isTrue(_ name: String, _ ok: Bool, expected: String) -> Check {
+    public static func isTrue(_ name: String, _ ok: Bool, expected: String) -> Check {
         Check(name: name, actual: ok ? "满足" : "不满足", expected: expected, passed: ok)
     }
-    static func lessThan(_ name: String, _ actual: Int, _ limit: Int, unit: String = "") -> Check {
+    public static func lessThan(_ name: String, _ actual: Int, _ limit: Int, unit: String = "") -> Check {
         Check(name: name, actual: "\(actual)\(unit)", expected: "< \(limit)\(unit)",
               passed: actual < limit)
     }
 }
 
 /// One piece of evidence in the report appendix.
-struct Evidence: Identifiable, Codable, Equatable {
-    enum Kind: String, Codable { case log, markdown }
+public struct Evidence: Identifiable, Codable, Equatable {
+    public enum Kind: String, Codable { case log, markdown }
 
-    let title: String
-    let body: String
-    var kind: Kind = .log
-    var id: String { title }
+    public let title: String
+    public let body: String
+    public var kind: Kind = .log
+    public var id: String { title }
 
-    static func log(_ title: String, _ body: String) -> Evidence {
+    public static func log(_ title: String, _ body: String) -> Evidence {
         Evidence(title: title, body: body, kind: .log)
     }
-    static func markdown(_ title: String, _ body: String) -> Evidence {
+    public static func markdown(_ title: String, _ body: String) -> Evidence {
         Evidence(title: title, body: body, kind: .markdown)
     }
 }
 
 /// Everything one item produced.
-struct ItemResult: Codable, Equatable {
-    let code: String
+public struct ItemResult: Codable, Equatable {
+    public let code: String
 
     /// Did it run properly. nil means it has not run yet.
-    var execution: Execution?
+    public var execution: Execution?
     /// What the criteria say about the material. nil unless `execution == .completed`.
-    var verdict: Verdict?
+    public var verdict: Verdict?
 
-    var measurements: [Measurement] = []
+    public var measurements: [Measurement] = []
 
     /// Preconditions for this run being valid at all: did the test actually do its work, did our
     /// own tooling behave, is the evidence readable.
@@ -92,27 +92,27 @@ struct ItemResult: Codable, Equatable {
     /// body. In the first iteration these shared one list with the criteria, so "memtester never
     /// looped" and "memtester found a bit error" both rendered as 不通过, and two thirds of the
     /// forty-five criteria were facts about our own execution wearing a verdict's clothes.
-    var validity: [Check] = []
+    public var validity: [Check] = []
 
     /// Criteria about the material. Only these can produce `notPassed`.
-    var criteria: [Check] = []
+    public var criteria: [Check] = []
 
-    var evidence: [Evidence] = []
-    var startedAt: Date?
-    var finishedAt: Date?
+    public var evidence: [Evidence] = []
+    public var startedAt: Date?
+    public var finishedAt: Date?
 
     /// Present only for the long-running items.
-    var progress: LongTestProgress?
+    public var progress: LongTestProgress?
 
-    init(code: String) { self.code = code }
+    public init(code: String) { self.code = code }
 
-    var duration: TimeInterval? {
+    public var duration: TimeInterval? {
         guard let s = startedAt, let f = finishedAt else { return nil }
         return f.timeIntervalSince(s)
     }
 
     /// Every check, in the order the report shows them.
-    var allChecks: [Check] { validity + criteria }
+    public var allChecks: [Check] { validity + criteria }
 
     // MARK: - Settling
 
@@ -120,7 +120,7 @@ struct ItemResult: Codable, Equatable {
     ///
     /// Validity is decided first and stops there: a run that was not valid gets no verdict at all,
     /// rather than a verdict computed from readings nobody should trust.
-    mutating func conclude(_ execution: Execution = .completed) {
+    public mutating func conclude(_ execution: Execution = .completed) {
         self.execution = execution
         guard execution.isCompleted else { verdict = nil; return }
 
@@ -134,17 +134,17 @@ struct ItemResult: Codable, Equatable {
     }
 
     /// A precondition was not met, so it never started.
-    mutating func notStarted(_ why: String) { conclude(.notStarted(why)) }
+    public mutating func notStarted(_ why: String) { conclude(.notStarted(why)) }
     /// It started and could not finish.
-    mutating func interrupted(_ why: String) { conclude(.interrupted(why)) }
+    public mutating func interrupted(_ why: String) { conclude(.interrupted(why)) }
     /// It ran, but the run was not valid. Never a statement about the material.
-    mutating func invalid(_ why: String) { conclude(.invalid(why)) }
+    public mutating func invalid(_ why: String) { conclude(.invalid(why)) }
 
     // MARK: - Reading the conclusion
 
     /// Whether this item says the material is defective. The one question that must never be
     /// answered by anything but a verdict.
-    var condemnsMaterial: Bool {
+    public var condemnsMaterial: Bool {
         if case .notPassed = verdict { return true }
         return false
     }
@@ -154,7 +154,7 @@ struct ItemResult: Codable, Equatable {
     /// `interrupted` and `invalid` share one label: the operator's next action is the same for both
     /// — nothing about the material was established — and which of the two it was belongs in the
     /// explanation, not in another status light.
-    var label: String {
+    public var label: String {
         guard let execution else { return "未开始" }
         switch execution {
         case .notStarted:            return "跳过"
@@ -162,7 +162,9 @@ struct ItemResult: Codable, Equatable {
         case .completed:
             switch verdict {
             case .passed?:      return "通过"
-            case .notPassed?:   return "失败"
+            // 不合格, not 失败: this is a statement about the material, and 失败 also
+            // reads as "the test failed", which is the other axis entirely.
+            case .notPassed?:   return "不合格"
             case .noCriterion?: return "仅记录"
             case nil:           return "未得结果"
             }
@@ -170,7 +172,7 @@ struct ItemResult: Codable, Equatable {
     }
 
     /// The accompanying explanation, or nil when there is nothing to explain.
-    var detail: String? {
+    public var detail: String? {
         if let reason = execution?.reason { return reason }
         if case let .notPassed(why) = verdict { return why }
         return nil

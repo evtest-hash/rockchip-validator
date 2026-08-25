@@ -1,7 +1,7 @@
 import Foundation
 
 /// Renderer for the preliminary test report. Invariants: docs/decisions.md.
-struct ReportRenderer {
+public struct ReportRenderer {
 
     init() {}
 
@@ -9,7 +9,7 @@ struct ReportRenderer {
 
     /// Renders the whole preliminary report from one run's record.
     /// A version this renderer does not know is refused rather than guessed at.
-    static func render(_ run: Run) -> String {
+    public static func render(_ run: Run) -> String {
         guard run.schemaVersion == Run.currentSchema else {
             return "# 无法渲染报告\n\n本报告数据的 schemaVersion 为 \(run.schemaVersion)，"
                  + "当前程序只认识 \(Run.currentSchema)。请用生成它的版本打开。\n"
@@ -291,6 +291,12 @@ struct ReportRenderer {
 
     /// Which values each item shows in the result column. Internal, not private, so
     /// `KeyMeasurementNameTests` can assert every name here is one a producer actually records.
+    /// The measurements worth showing beside an item's name, in the report row and in the
+    /// interface alike — so the two never pick different ones out of the same record.
+    public static func keyMeasurements(for code: String) -> [String] {
+        keyMeasurementNames[code] ?? []
+    }
+
     static let keyMeasurementNames: [String: [String]] = [
         // The cfg name already carries the capacity and the topology, so it is the whole column.
         "T01": ["匹配 cfg"],

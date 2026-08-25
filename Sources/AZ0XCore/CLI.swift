@@ -206,7 +206,7 @@ public enum AZ0X {
                 // then. What the verdicts rest on is already in the record, so the delivered folder
                 // is a report and a record, nothing else.
                 if !keepLogs { try? FileManager.default.removeItem(at: dir.appendingPathComponent("logs")) }
-                write(run, into: dir)
+                RunStore.write(run, into: dir)
             }
         }
         print("批次目录：\(folder.path)")
@@ -214,17 +214,6 @@ public enum AZ0X {
         // A defective material is not a failure of this program: it ran and reported. Only a batch
         // that could not produce a single record exits non-zero.
         return runs.contains { !$0.results.isEmpty } ? 0 : 1
-    }
-
-    /// Writes one board's record and report into its folder.
-    private static func write(_ run: Run, into dir: URL) {
-        let name = "\(run.batchID)-\(run.boardName)\(run.isPartial ? "-抽测记录" : "-初步报告").md"
-        try? ReportRenderer.render(run).write(to: dir.appendingPathComponent(name),
-                                              atomically: true, encoding: .utf8)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = .prettyPrinted
-        try? encoder.encode(run).write(to: dir.appendingPathComponent("run.json"))
     }
 
     /// Prints one line per event, prefixed by the board once a batch has more than one.
@@ -240,14 +229,14 @@ public enum AZ0X {
         func show(_ event: BatchEvent) {
             switch event {
             case let .refused(board, why):
-                emit("⚠ \(board) 未开始：\(why)")
+                emit("⚠ \(board.display) 未开始：\(why)")
             case let .benchStarted(board):
-                if many { emit("▷ \(board)") }
+                if many { emit("▷ \(board.display)") }
             case let .bench(board, e):
-                emit((many ? "[\(board)] " : "") + AZ0X.line(for: e))
+                emit((many ? "[\(board.display)] " : "") + AZ0X.line(for: e))
             case let .benchFinished(board, run, _):
                 let where_ = run.stoppedAt.map { "，终止于 \($0)" } ?? ""
-                emit("■ \(board) 结束\(where_)")
+                emit("■ \(board.display) 结束\(where_)")
             case .finished:
                 break
             }

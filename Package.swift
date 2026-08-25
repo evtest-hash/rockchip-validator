@@ -17,6 +17,12 @@ let package = Package(
             path: "Sources/AZ0XCore",
             resources: [.copy("Resources/payloads")]
         ),
+        // The interface, in its own target, depending on the core and never the other way round.
+        .executableTarget(
+            name: "AZ0XValidator",
+            dependencies: ["AZ0XCore"],
+            path: "Sources/AZ0XValidator"
+        ),
         .executableTarget(
             name: "az0x",
             dependencies: ["AZ0XCore"],

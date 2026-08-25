@@ -14,7 +14,9 @@ import Foundation
 /// It coordinates nothing. Which boards run, in which batches, when — all of that is the caller's
 /// business, and nothing here queues, waits or retries. Across processes it says nothing at all;
 /// that is the operator's to manage, as agreed.
-actor BenchRegistry {
+public actor BenchRegistry {
+
+    public init() {}
 
     private var held: Set<String> = []
 
@@ -23,16 +25,16 @@ actor BenchRegistry {
     /// The key is whatever addresses the board for this run: the maskrom device id for a sequence
     /// that starts there, the adb serial for one that names an already-flashed board. Two runs that
     /// address the same board the same way collide, which is the case worth catching.
-    func take(_ key: String) -> Bool {
+    public func take(_ key: String) -> Bool {
         held.insert(key).inserted
     }
 
     /// Gives a board back. Must run on every path out of a bench, or a socket that is physically
     /// free stays unusable for the rest of the session — the same fault, one level up, that a
     /// twelve-hour wall clock used to cause on the board itself.
-    func release(_ key: String) {
+    public func release(_ key: String) {
         held.remove(key)
     }
 
-    var inUse: Set<String> { held }
+    public var inUse: Set<String> { held }
 }

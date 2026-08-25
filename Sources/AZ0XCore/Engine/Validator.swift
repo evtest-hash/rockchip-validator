@@ -25,7 +25,7 @@ struct RunPlan {
 ///
 /// The engine emits and forgets. In the first iteration it drove an `ObservableObject` directly,
 /// which is how `@MainActor` spread from a view all the way into the board I/O.
-enum RunEvent {
+public enum RunEvent {
     case waitingForBoard(deviceID: String)
     case boardBound(serial: String, identity: String)
     case itemStarted(TestItem)

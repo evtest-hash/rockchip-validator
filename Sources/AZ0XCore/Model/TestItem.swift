@@ -1,13 +1,13 @@
 import Foundation
 
 /// A capability a model may lack.
-enum Capability: String, Codable {
+public enum Capability: String, Codable {
     /// DQ eye scan (T03).
     case eyescan
 }
 
 /// Execution domain.
-enum ExecutionDomain: String, Codable {
+public enum ExecutionDomain: String, Codable {
     /// maskrom, reached over direct USB with VID 0x2207: T01 to T04 and E01.
     case maskrom
     /// On-board Linux over adb, booted from the flashed image with root: T05 to T08, E02 to E06.
@@ -15,41 +15,41 @@ enum ExecutionDomain: String, Codable {
 }
 
 /// The static definition of a test item: what it measures, how it is judged, and where it runs.
-struct TestItem: Identifiable, Codable {
-    let code: String
-    let title: String
+public struct TestItem: Identifiable, Codable {
+    public let code: String
+    public let title: String
     /// Text of the "test method" column of the report.
-    let method: String
-    let domain: ExecutionDomain
+    public let method: String
+    public let domain: ExecutionDomain
     /// Whether this is a long run, on the order of 12 hours, structured as start, poll and settle.
-    let isLongRunning: Bool
+    public let isLongRunning: Bool
     /// Whether the item only records measurements and leaves the verdict to a human.
-    let isRecordOnly: Bool
+    public let isRecordOnly: Bool
     /// Whether the operator may deselect the item on the launcher screen.
-    let isOptional: Bool
+    public let isOptional: Bool
 
     /// Whether the items after this one need it to have produced a result.
     ///
     /// Only flashing does: without firmware there is no booted Linux for a board item to run in.
     /// Everything else gates nothing, which is the whole point of deciding flow separately from the
     /// verdict — a record-only reading that could not be taken must not cost the operator a burn-in.
-    var gatesRest: Bool { TestItem.flashCodes.contains(code) }
+    public var gatesRest: Bool { TestItem.flashCodes.contains(code) }
 
     /// Capability this item requires of the model; nil means every model has it.
-    var requires: Capability?
+    public var requires: Capability?
 
     /// The item that implies this one: if that item is in the sequence, so is this one.
-    var impliedBy: String?
+    public var impliedBy: String?
 
-    var id: String { code }
+    public var id: String { code }
 
     /// Full title shown in the interface, for example "T02 焊接检测".
-    var displayTitle: String { "\(code) \(title)" }
+    public var displayTitle: String { "\(code) \(title)" }
 }
 
-extension TestItem {
+public extension TestItem {
     /// DDR validation flow T01 to T08.
-    static let ddrItems: [TestItem] = [
+    public static let ddrItems: [TestItem] = [
         TestItem(code: "T01", title: "规格验证",
                  method: "探测 DDR 实际规格并匹配配置，供人工与物料核对",
                  domain: .maskrom, isLongRunning: false, isRecordOnly: true, isOptional: false),
@@ -79,7 +79,7 @@ extension TestItem {
     ]
 
     /// eMMC validation flow E01 to E06.
-    static let emmcItems: [TestItem] = [
+    public static let emmcItems: [TestItem] = [
         TestItem(code: "E01", title: "刷机",
                  method: "取最新生产镜像刷入 eMMC，验证写入通路",
                  domain: .maskrom, isLongRunning: false, isRecordOnly: false, isOptional: false),
@@ -103,22 +103,22 @@ extension TestItem {
     ]
 
     /// The items that actually exist for a model in a flow.
-    static func items(for flow: ValidationFlow, model: DeviceModel) -> [TestItem] {
+    public static func items(for flow: ValidationFlow, model: DeviceModel) -> [TestItem] {
         all(for: flow).filter { supports($0, model: model) }
     }
 
     /// The complete item table of a flow, independent of model.
-    static func all(for flow: ValidationFlow) -> [TestItem] {
+    public static func all(for flow: ValidationFlow) -> [TestItem] {
         flow == .ddr ? ddrItems : emmcItems
     }
 
-    static func supports(_ item: TestItem, model: DeviceModel) -> Bool {
+    public static func supports(_ item: TestItem, model: DeviceModel) -> Bool {
         guard let need = item.requires else { return true }
         return model.supports(need)
     }
 
     /// Items excluded for this model, used by the report to generate the sequence-scope note.
-    static func excluded(for flow: ValidationFlow, model: DeviceModel) -> [TestItem] {
+    public static func excluded(for flow: ValidationFlow, model: DeviceModel) -> [TestItem] {
         all(for: flow).filter { !supports($0, model: model) }
     }
 
@@ -128,7 +128,7 @@ extension TestItem {
     ///
     /// Flashing locks as soon as an on-board item is selected: those items run on the firmware this
     /// project builds, and flashing is what makes the addressing premise hold.
-    static func isLocked(_ item: TestItem, picked: Set<String>,
+    public static func isLocked(_ item: TestItem, picked: Set<String>,
                          flow: ValidationFlow, model: DeviceModel) -> Bool {
         if !item.isOptional { return true }
         guard flashCodes.contains(item.code) else { return false }
@@ -138,7 +138,7 @@ extension TestItem {
     }
 
     /// The sequence to execute: locked items plus the selected ones, in flow order.
-    static func resolveSelection(_ picked: Set<String>,
+    public static func resolveSelection(_ picked: Set<String>,
                                  flow: ValidationFlow,
                                  model: DeviceModel) -> [TestItem] {
         let available = items(for: flow, model: model)
@@ -152,7 +152,7 @@ extension TestItem {
     }
 
     /// Items the operator may select for this flow and model.
-    static func optionalItems(for flow: ValidationFlow, model: DeviceModel) -> [TestItem] {
+    public static func optionalItems(for flow: ValidationFlow, model: DeviceModel) -> [TestItem] {
         items(for: flow, model: model).filter { $0.isOptional && $0.impliedBy == nil }
     }
 
@@ -163,7 +163,7 @@ extension TestItem {
     /// the test and stopped being true the moment a board cycled at a different speed. What they are
     /// bounded by is a count, so a count is what the label says; how long that takes is the board's
     /// to determine and the report's to record afterwards.
-    func workloadLabel(burninPhases: Int) -> String? {
+    public func workloadLabel(burninPhases: Int) -> String? {
         switch code {
         case "T06": return TestItem.hoursText(Thresholds.longRunSeconds * max(1, burninPhases))
         case "T07": return "\(Thresholds.longRunCycles) 次休眠唤醒"
@@ -173,7 +173,7 @@ extension TestItem {
         }
     }
 
-    static func hoursText(_ seconds: Int) -> String {
+    public static func hoursText(_ seconds: Int) -> String {
         let h = Double(seconds) / 3600
         return h == h.rounded() ? "\(Int(h)) 小时"
                                 : String(format: "%.1f 小时", h)
@@ -182,12 +182,12 @@ extension TestItem {
     /// Whether a selection is partial. Three layers decided this independently and with
     /// different rules, so a batch with every item but one burn-in phase rendered as
     /// 抽测记录 in the body, was written to `-初步报告.md`, and showed no 抽测 chip.
-    static func isPartial(_ items: [TestItem], flow: ValidationFlow,
+    public static func isPartial(_ items: [TestItem], flow: ValidationFlow,
                           model: DeviceModel, burninPhases: Int) -> Bool {
         items.count < self.items(for: flow, model: model).count
             || (items.contains { $0.code == "T06" } && burninPhases < BurninPhase.allCases.count)
     }
 
     /// Flashing item codes of the two flows, used by the sequencer's consistency check.
-    static let flashCodes: Set<String> = ["T04", "E01"]
+    public static let flashCodes: Set<String> = ["T04", "E01"]
 }

@@ -1,19 +1,19 @@
 import Foundation
 
 /// Progress of a time-consuming step inside an item. Interface state, never part of a conclusion.
-struct StepProgress: Equatable {
+public struct StepProgress: Equatable {
     /// Downloads are measured in bytes, which gives a known denominator.
-    enum Metric: Equatable { case bytes, percent }
-    var metric: Metric = .bytes
+    public enum Metric: Equatable { case bytes, percent }
+    public var metric: Metric = .bytes
 
-    var code: String
+    public var code: String
     /// Step name, for example "下载镜像".
-    var label: String
+    public var label: String
     /// `total` is nil when the total is unknown.
-    var done: Int64
-    var total: Int64?
+    public var done: Int64
+    public var total: Int64?
 
-    var fraction: Double? {
+    public var fraction: Double? {
         guard let total, total > 0 else { return nil }
         return min(1, max(0, Double(done) / Double(total)))
     }
@@ -23,7 +23,7 @@ struct StepProgress: Equatable {
     /// Bytes are decimal MB, to match the image size published by CI. The percent case used to
     /// return an empty string, so flashing printed its label and nothing else — twenty-odd bare
     /// `刷入镜像` lines for a run that was in fact reporting progress the whole time.
-    var valueText: String {
+    public var valueText: String {
         switch metric {
         case .percent:
             return total == nil ? "…" : "\(done)%"
@@ -36,9 +36,9 @@ struct StepProgress: Equatable {
 }
 
 /// Progress of a long-running item, read from the board's own log rather than inferred.
-struct LongTestProgress: Codable, Equatable {
+public struct LongTestProgress: Codable, Equatable {
     /// Metric and denominator. Each long item is bounded by what it is actually about.
-    enum Scale: Codable, Equatable {
+    public enum Scale: Codable, Equatable {
         /// T06: bounded by hours.
         case duration(TimeInterval)
         /// E05: bounded by bytes written.
@@ -49,13 +49,13 @@ struct LongTestProgress: Codable, Equatable {
     }
 
     /// Plain description of the current stage.
-    var phase: String
+    public var phase: String
     /// Wall-clock seconds elapsed.
-    var elapsed: TimeInterval
-    var scale: Scale
-    var logTail: String = ""
+    public var elapsed: TimeInterval
+    public var scale: Scale
+    public var logTail: String = ""
 
-    var fraction: Double {
+    public var fraction: Double {
         switch scale {
         case let .duration(total):
             return total > 0 ? min(1, max(0, elapsed / total)) : 0
@@ -64,7 +64,7 @@ struct LongTestProgress: Codable, Equatable {
         }
     }
 
-    var progressText: String {
+    public var progressText: String {
         switch scale {
         case let .duration(total):
             return "\(formatDuration(elapsed)) / \(formatDuration(total))"
@@ -80,19 +80,19 @@ struct LongTestProgress: Codable, Equatable {
 ///
 /// A reference so both closures see the same value: an offline line must keep showing the count
 /// reached rather than starting again from zero, which reads as if the run had restarted.
-final class LastCount: @unchecked Sendable {
-    var value = 0
+public final class LastCount: @unchecked Sendable {
+    public var value = 0
 }
 
 /// Timestamp as the operator reads it, in one place.
-let operatorStamp: DateFormatter = {
+public let operatorStamp: DateFormatter = {
     let f = DateFormatter()
     f.dateFormat = "yyyy-MM-dd HH:mm"
     return f
 }()
 
 /// Duration as the operator reads it, worded as the report words it.
-func formatDuration(_ t: TimeInterval) -> String {
+public func formatDuration(_ t: TimeInterval) -> String {
     let total = Int(t.rounded())
     let h = total / 3600, m = (total % 3600) / 60, s = total % 60
     if h > 0 { return "\(h) 小时 \(m) 分" }

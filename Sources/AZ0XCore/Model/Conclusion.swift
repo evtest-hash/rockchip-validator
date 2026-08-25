@@ -15,7 +15,7 @@ import Foundation
 // the verdict's class, so no item was able to say "I have no result — carry on".
 
 /// Did this item run properly. Never a statement about the material.
-enum Execution: Equatable, Codable {
+public enum Execution: Equatable, Codable {
     /// Ran to its own end. Only then can a verdict exist.
     case completed
     /// A precondition was not met, so it never started.
@@ -30,10 +30,10 @@ enum Execution: Equatable, Codable {
     /// retrying is the reading.
     case invalid(String)
 
-    var isCompleted: Bool { self == .completed }
+    public var isCompleted: Bool { self == .completed }
 
     /// Why it did not run properly, or nil when it did.
-    var reason: String? {
+    public var reason: String? {
         switch self {
         case .completed: return nil
         case let .notStarted(m), let .interrupted(m), let .invalid(m): return m
@@ -42,7 +42,7 @@ enum Execution: Equatable, Codable {
 }
 
 /// What the implemented criteria say about the material. Exists only when execution completed.
-enum Verdict: Equatable, Codable {
+public enum Verdict: Equatable, Codable {
     case passed
     case notPassed(String)
     /// Measured, with no criterion implemented. The report states the values and says so; whoever
@@ -51,14 +51,14 @@ enum Verdict: Equatable, Codable {
 }
 
 /// What the sequence does after an item.
-enum Flow: Equatable {
+public enum Flow: Equatable {
     case cont
     case stop
 
     /// Defective material stops the run: there is no point spending another thirty-six hours on it.
     /// A problem on our own side stops the run only when the items that follow depend on this one —
     /// a firmware missing a diagnostic binary must not cost the operator the entire burn-in.
-    static func after(_ r: ItemResult, item: TestItem) -> Flow {
+    public static func after(_ r: ItemResult, item: TestItem) -> Flow {
         if case .notPassed = r.verdict { return .stop }
         guard let execution = r.execution else { return .cont }
         return execution.isCompleted || !item.gatesRest ? .cont : .stop

@@ -27,7 +27,7 @@ final class ConclusionTests: XCTestCase {
 
         XCTAssertTrue(r.condemnsMaterial)
         XCTAssertEqual(r.verdict, .notPassed("memtester FAILURE：实测 3，要求 = 0"))
-        XCTAssertEqual(r.label, "失败")
+        XCTAssertEqual(r.label, "不合格")
     }
 
     /// **The point of the whole model.** A failing validity check must never become a verdict.
