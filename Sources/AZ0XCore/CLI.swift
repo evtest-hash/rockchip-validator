@@ -17,7 +17,7 @@ public enum AZ0X {
         case "run":
             return await runValidation(Options(args))
         case "devices":
-            return await listDevices()
+            return await listDevices(Options(args))
         case "report":
             return renderReport(path: args.first)
         case "help", "-h", "--help":
@@ -33,7 +33,7 @@ public enum AZ0X {
         az0x —— AZ0X 物料验证执行台
 
         用法：
-          az0x devices                        列出当前处于 maskrom 的板卡
+          az0x devices [--model AZ08]         列出当前处于 maskrom 的板卡
           az0x run --model AZ08 [选项]        对一块板跑完验证序列，输出报告
           az0x report <run.json>             重新渲染一次已归档的运行
           az0x help                          显示本说明
@@ -41,12 +41,13 @@ public enum AZ0X {
         run 的选项：
           --model <AZ05|AZ07|AZ08|AZ04A|AZ04B>   必填
           --flow <ddr|emmc>                      默认 ddr
-          --device-id <id>                       默认：当前唯一在位的那块
+          --device-id <id>                       可重复，一块板一个；默认：当前唯一在位的那块
           --serial <adb serial>                  只跑板载项（不含刷机项）时用：
                                                  指定一块已刷好测试固件的板子；
                                                  默认：当前唯一在线的那台
           --items T01,T02,…                      默认：该型号该流程的全部项目
-          --out <目录>                           报告与板端日志的落地目录
+          --out <目录>                           批次落地的根目录
+                                                 默认 ~/Documents/AZ0X 物料验证/
           --burnin-seconds <n>                   T06 每段时长，默认 43200
           --cycles <n>                           T07/T08 次数，默认 3000
           --keep-board-logs                      保留运行中拉下来的板端原始日志目录；
@@ -61,7 +62,8 @@ public enum AZ0X {
     /// Flags parsed without a dependency: this tool has none, and one argument parser is not worth
     /// the first.
     private struct Options {
-        var values: [String: String] = [:]
+        /// Flags in the order given, so a repeated one keeps every value rather than the last.
+        private var pairs: [(String, String)] = []
 
         init(_ args: [String]) {
             var rest = args
@@ -70,16 +72,20 @@ public enum AZ0X {
                 guard key.hasPrefix("--") else { continue }
                 let name = String(key.dropFirst(2))
                 if let next = rest.first, !next.hasPrefix("--") {
-                    values[name] = rest.removeFirst()
+                    pairs.append((name, rest.removeFirst()))
                 } else {
-                    values[name] = ""
+                    pairs.append((name, ""))
                 }
             }
         }
 
         func string(_ name: String) -> String? {
-            values[name].flatMap { $0.isEmpty ? nil : $0 }
+            pairs.last { $0.0 == name }.map(\.1).flatMap { $0.isEmpty ? nil : $0 }
         }
+        func strings(_ name: String) -> [String] {
+            pairs.filter { $0.0 == name && !$0.1.isEmpty }.map(\.1)
+        }
+        func has(_ name: String) -> Bool { pairs.contains { $0.0 == name } }
         func int(_ name: String) -> Int? { string(name).flatMap(Int.init) }
     }
 
@@ -88,15 +94,27 @@ public enum AZ0X {
         return 2
     }
 
-    private static func listDevices() async -> Int32 {
+    /// What is plugged in right now, and nothing more.
+    ///
+    /// Deliberately not a statement about availability: another invocation may already be driving one
+    /// of these and nothing here can see across processes. Which boards to use is the caller's to
+    /// decide — this only saves typing the device ids out of thin air.
+    private static func listDevices(_ o: Options) async -> Int32 {
         guard let cli = DdrCli() else { return fail("RockchipDDRTestUtilityCLI 未随程序打包") }
+        let model = o.string("model").flatMap { DeviceModel(rawValue: $0.uppercased()) }
         let devices = await cli.devices()
         guard !devices.isEmpty else {
             print("当前没有处于 maskrom 的板卡。")
             return 1
         }
-        for d in devices { print("\(d.id)  pid=\(d.pid)") }
-        return 0
+        let mine = model.map { m in devices.filter { $0.pid == m.maskromPID } } ?? devices
+        for d in mine {
+            print("插座 \(DdrCli.socket(d.id))   \(d.id)   pid=\(d.pid)")
+        }
+        let others = devices.count - mine.count
+        if others > 0 { print("另有 \(others) 块其它型号，不在候选内") }
+        if mine.isEmpty { print("没有与所选型号相符的板卡。") }
+        return mine.isEmpty ? 1 : 0
     }
 
     private static func runValidation(_ o: Options) async -> Int32 {
@@ -119,90 +137,131 @@ public enum AZ0X {
         }
         let needsMaskrom = items.contains { $0.domain == .maskrom }
 
-        // Which board. Naming it is required as soon as more than one is in maskrom: the whole point
-        // of addressing by the tool's device id is that two boards of one model are otherwise
+        // Which boards. Naming them is required as soon as more than one is in maskrom: the whole
+        // point of addressing by the tool's device id is that two boards of one model are otherwise
         // indistinguishable, and flashing the wrong one is not undoable.
-        var deviceID = o.string("device-id") ?? ""
-        if needsMaskrom, deviceID.isEmpty {
-            let devices = await cli.devices()
-            guard devices.count == 1 else {
-                return fail(devices.isEmpty
-                    ? "当前没有处于 maskrom 的板卡。"
-                    : "有 \(devices.count) 块板在位，请用 --device-id 指定；`az0x devices` 可列出。")
+        //
+        // There is deliberately no --all or --count. Both would mean this program knows which boards
+        // are free, and it does not: another invocation may be driving one, and nothing here can see
+        // across processes. Naming them is the only honest way.
+        var boards: [BoardAddress] = []
+        if needsMaskrom {
+            let named = o.strings("device-id")
+            if named.isEmpty {
+                let devices = await cli.devices()
+                guard devices.count == 1 else {
+                    return fail(devices.isEmpty
+                        ? "当前没有处于 maskrom 的板卡。"
+                        : "有 \(devices.count) 块板在位，请用 --device-id 逐块指定；`az0x devices` 可列出。")
+                }
+                boards = [.maskrom(devices[0].id)]
+            } else {
+                boards = named.map { .maskrom($0) }
             }
-            deviceID = devices[0].id
-        }
-
-        // A selection with no maskrom item never sees the board there, so it is addressed by the
-        // serial it reports over adb instead. Same rule as above: one board, take it; more than
-        // one, say which.
-        var boardSerial = o.string("serial")
-        if !needsMaskrom, boardSerial == nil {
-            let online = await Adb.onlineSerials()
-            guard online.count == 1 else {
-                return fail(online.isEmpty
-                    ? "当前没有在线的 adb 板卡。板载测试要求板上已刷入我们编译的测试固件。"
-                    : "有 \(online.count) 台板卡在线，请用 --serial 指定：" + online.joined(separator: "、"))
+        } else {
+            // A selection with no maskrom item never sees the board there, so it is addressed by
+            // the serial it reports over adb instead.
+            let named = o.strings("serial")
+            if named.isEmpty {
+                let online = await Adb.onlineSerials()
+                guard online.count == 1 else {
+                    return fail(online.isEmpty
+                        ? "当前没有在线的 adb 板卡。板载测试要求板上已刷入我们编译的测试固件。"
+                        : "有 \(online.count) 台板卡在线，请用 --serial 指定：" + online.joined(separator: "、"))
+                }
+                boards = [.flashed(serial: online[0])]
+            } else {
+                boards = named.map { .flashed(serial: $0) }
             }
-            boardSerial = online[0]
         }
 
         let stamp = DateFormatter()
         stamp.dateFormat = "yyyyMMdd-HHmmss"
         let batchID = "\(model.rawValue)-\(flow == .ddr ? "DDR" : "EMMC")-\(stamp.string(from: Date()))"
 
-        var plan = RunPlan(batchID: batchID, runID: UUID().uuidString, model: model, flow: flow,
-                           items: items, burninPhases: Set(BurninPhase.allCases),
-                           deviceID: deviceID, boardSerial: boardSerial)
+        var plan = BatchPlan(batchID: batchID, model: model, flow: flow, items: items,
+                             burninPhases: Set(BurninPhase.allCases), boards: boards)
         if let n = o.int("burnin-seconds") { plan.burninSeconds = n }
         if let n = o.int("cycles") { plan.cycles = n }
 
-        let out = o.string("out").map { URL(fileURLWithPath: $0, isDirectory: true) }
-        if let out { try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true) }
+        let root = o.string("out").map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? ArchiveRoot.default
+        let folder = root.appendingPathComponent(batchID, isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
-        let validator = Validator(plan: plan, tool: cli,
-                                  boardSession: { Adb(serial: $0) },
-                                  flashTool: FlashTool(),
-                                  archiveFolder: out)
+        let runner = BatchRunner(
+            plan: plan, registry: BenchRegistry(),
+            makeValidator: { runPlan, dir in
+                Validator(plan: runPlan, tool: cli, boardSession: { Adb(serial: $0) },
+                          flashTool: FlashTool(), archiveFolder: dir)
+            },
+            folder: folder)
 
-        // Progress arrives many times a second; only a line that says something new is printed.
-        // Without this, flashing filled the terminal with identical lines and a long run would bury
-        // the item results that actually matter between them.
-        var lastLine = ""
-        let run = await validator.run { event in
-            let line = self.line(for: event)
+        let console = Console(many: boards.count > 1)
+        let keepLogs = o.has("keep-board-logs")
+        let runs = await runner.run { event in
+            console.show(event)
+            if case let .benchFinished(_, run, dir) = event, let dir {
+                // The board-side logs are pulled while the run is in flight so they can be looked at
+                // then. What the verdicts rest on is already in the record, so the delivered folder
+                // is a report and a record, nothing else.
+                if !keepLogs { try? FileManager.default.removeItem(at: dir.appendingPathComponent("logs")) }
+                write(run, into: dir)
+            }
+        }
+        print("批次目录：\(folder.path)")
+
+        // A defective material is not a failure of this program: it ran and reported. Only a batch
+        // that could not produce a single record exits non-zero.
+        return runs.contains { !$0.results.isEmpty } ? 0 : 1
+    }
+
+    /// Writes one board's record and report into its folder.
+    private static func write(_ run: Run, into dir: URL) {
+        let name = "\(run.batchID)-\(run.boardName)\(run.isPartial ? "-抽测记录" : "-初步报告").md"
+        try? ReportRenderer.render(run).write(to: dir.appendingPathComponent(name),
+                                              atomically: true, encoding: .utf8)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = .prettyPrinted
+        try? encoder.encode(run).write(to: dir.appendingPathComponent("run.json"))
+    }
+
+    /// Prints one line per event, prefixed by the board once a batch has more than one.
+    ///
+    /// Progress arrives many times a second; a line identical to the last is dropped. Without that,
+    /// flashing filled the terminal with identical lines and a long run buried the item results
+    /// between them.
+    private final class Console: @unchecked Sendable {
+        private let many: Bool
+        private var lastLine = ""
+        init(many: Bool) { self.many = many }
+
+        func show(_ event: BatchEvent) {
+            switch event {
+            case let .refused(board, why):
+                emit("⚠ \(board) 未开始：\(why)")
+            case let .benchStarted(board):
+                if many { emit("▷ \(board)") }
+            case let .bench(board, e):
+                emit((many ? "[\(board)] " : "") + AZ0X.line(for: e))
+            case let .benchFinished(board, run, _):
+                let where_ = run.stoppedAt.map { "，终止于 \($0)" } ?? ""
+                emit("■ \(board) 结束\(where_)")
+            case .finished:
+                break
+            }
+        }
+
+        private func emit(_ line: String) {
             guard line != lastLine else { return }
             lastLine = line
             print(line)
         }
-
-        // The board-side logs are pulled while the run is in flight so they can be looked at then.
-        // What the verdicts rest on is already in the record, so once that is written the working
-        // directory has done its job: the delivered folder is a report and a record, nothing else.
-        if let out, o.values["keep-board-logs"] == nil {
-            try? FileManager.default.removeItem(at: out.appendingPathComponent("logs"))
-        }
-
-        let report = ReportRenderer.render(run)
-        if let out {
-            let name = "\(batchID)-\(run.boardName)\(run.isPartial ? "-抽测记录" : "-初步报告").md"
-            try? report.write(to: out.appendingPathComponent(name), atomically: true, encoding: .utf8)
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            encoder.outputFormatting = .prettyPrinted
-            try? encoder.encode(run).write(to: out.appendingPathComponent("run.json"))
-            print("报告：\(out.appendingPathComponent(name).path)")
-        } else {
-            print("")
-            print(report)
-        }
-        // A defective material is not a failure of this program: it ran and reported. Only a run
-        // that could not produce a record exits non-zero.
-        return run.results.isEmpty ? 1 : 0
     }
 
     /// One line per event. Deliberately plain: this is a log, not an interface.
-    private static func line(for event: RunEvent) -> String {
+    static func line(for event: RunEvent) -> String {
         switch event {
         case let .waitingForBoard(deviceID):
             return "等待板卡进入 maskrom：\(deviceID)"
