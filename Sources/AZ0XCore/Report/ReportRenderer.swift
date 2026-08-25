@@ -338,7 +338,7 @@ struct ReportRenderer {
                 switch e.kind {
                 case .log:
                     out.append("```text")
-                    out.append(e.body.trimmingCharacters(in: .newlines))
+                    out.append(abridged(e.body.trimmingCharacters(in: .newlines)))
                     out.append("```")
                 case .markdown:
                     out.append(e.body.trimmingCharacters(in: .newlines))
@@ -349,6 +349,23 @@ struct ReportRenderer {
             out.append("")
         }
         return out
+    }
+
+    /// Shortens a long log for reading, keeping both ends.
+    ///
+    /// The record keeps every line — a three-thousand-cycle `progress.log` is what each number in
+    /// this report was derived from, and it stays whole in `run.json`. A person reading the appendix
+    /// wants the start and the end, not three thousand lines between them.
+    ///
+    /// Shortening is not parsing: nothing here reads a value out of a log. Every figure in this
+    /// report came from a measurement or a check that was recorded when the item ran.
+    static func abridged(_ body: String, head: Int = 25, tail: Int = 25) -> String {
+        let lines = body.components(separatedBy: .newlines)
+        guard lines.count > head + tail + 1 else { return body }
+        let cut = lines.count - head - tail
+        return (lines.prefix(head)
+                + ["…（略去 \(cut) 行）…"]
+                + lines.suffix(tail)).joined(separator: "\n")
     }
 
     // MARK: - Helpers

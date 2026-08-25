@@ -11,16 +11,35 @@ extension BoardItems {
     // MARK: - T06 burn-in, fixed and scaling frequency, pass or fail
 
     /// Three phases in order: maximum frequency with stressapptest.
+    ///
+    /// Single exit, so that the rule about raw output holds on every path out of it — including the
+    /// ones that end in 未得结果, which is exactly when someone needs to see what the tools printed.
     func runT06(durationSeconds: Int = BoardItems.standardDuration,
                 phases: Set<BurninPhase> = Set(BurninPhase.allCases),
                 onProgress: ((LongTestProgress) -> Void)? = nil) async -> ItemResult {
-        var r = ItemResult(code: "T06")
         guard let payload = BundledTools.payload("t06_burnin.sh") else {
+            var r = ItemResult(code: "T06")
             r.interrupted("板端脚本 t06_burnin.sh 未随应用打包")
             return r
         }
         let bt = BoardTest(adb: adb, directory: "\(Self.boardRoot)/t06_burnin",
                            payload: payload, clock: clock)
+        var r = await burnIn(bt, durationSeconds: durationSeconds, phases: phases,
+                             onProgress: onProgress)
+        // A passing run keeps only its summaries; anything else keeps what the tools actually
+        // printed, because that is the only thing left to work from.
+        if r.verdict != .passed {
+            for (name, text) in await bt.fetch(["satA.out", "mtB.log", "mtC.log", "scaleC.log"]) {
+                r.evidence.append(.log(name, LongTest.tail(LongTest.normalize(text), 80)))
+            }
+        }
+        return r
+    }
+
+    /// The body of T06. Never call this directly: `runT06` owns attaching the raw output.
+    private func burnIn(_ bt: BoardTest, durationSeconds: Int, phases: Set<BurninPhase>,
+                        onProgress: ((LongTestProgress) -> Void)?) async -> ItemResult {
+        var r = ItemResult(code: "T06")
 
         let bootBefore = await bt.currentBootID()
         guard await LongTest.startFresh(bt, bound: durationSeconds,
@@ -54,12 +73,12 @@ extension BoardItems {
         let ran = BurninPhase.parseMask(RE.first(#"PHASES ([ABC]+)"#, in: progress) ?? "")
         guard !ran.isEmpty else {
             r.invalid("板端未记录执行段（progress.log 无 PHASES 行），无法判定")
-            r.evidence = [.log("板端 progress.log", LongTest.tail(progress, 40))]
+            r.evidence = [.log("板端 progress.log", progress)]
             return r
         }
         guard let didReboot = await bt.rebooted(since: bootBefore) else {
             r.invalid("读不到板端 boot_id，无法判断是否意外重启")
-            r.evidence = [.log("板端 progress.log 尾部", LongTest.tail(progress, 20))]
+            r.evidence = [.log("板端 progress.log", progress)]
             return r
         }
         // These two count *failures*, so `?? 0` is the safe direction and must stay. `scaleC.log` is
@@ -85,7 +104,7 @@ extension BoardItems {
         if let why = Self.t06UnreadableEvidence(ran: ran, mtBLoops: mtBRan,
                                                mtCLoops: mtCRan, scaleOK: scaleOK) {
             r.invalid(why)
-            r.evidence = [.log("板端 progress.log 尾部", LongTest.tail(progress, 20))]
+            r.evidence = [.log("板端 progress.log", progress)]
             return r
         }
 
@@ -110,13 +129,8 @@ extension BoardItems {
             .markdown("各段总览", Self.t06Table(progress, duration: durationSeconds, ran: ran)),
             .markdown("异常清单", LongTest.anomalyList(progress,
                 markers: ["SATABORT", "FIXFAIL", "SCALEFAIL", "SUSPENDFAIL"])),
+            .log("板端 progress.log", progress),
         ]
-        // Raw logs are attached only when the material was judged defective.
-        if r.condemnsMaterial {
-            for (name, text) in await bt.fetch(["satA.out", "mtB.log", "mtC.log", "scaleC.log"]) {
-                r.evidence.append(.log(name, LongTest.tail(text, 80)))
-            }
-        }
         return r
     }
 
@@ -186,7 +200,7 @@ extension BoardItems {
         // Three-state: an unreadable boot_id must not be guessed.
         guard let didReboot = await bt.rebooted(since: bootBefore) else {
             r.invalid("读不到板端 boot_id，无法判断是否意外重启")
-            r.evidence = [.log("板端 progress.log 尾部", LongTest.tail(progress, 20))]
+            r.evidence = [.log("板端 progress.log", progress)]
             return r
         }
 
@@ -209,6 +223,7 @@ extension BoardItems {
             .markdown("异常清单", LongTest.anomalyList(progress, markers: ["SUSPENDFAIL", "rc=[1-9]"])),
             .log("首尾周期样本", LongTest.headTail(progress, 3)),
             .log("内核 suspend_stats", stats),
+            .log("板端 progress.log", progress),
         ]
         return r
     }
@@ -324,6 +339,7 @@ extension BoardItems {
                                              target: targetBoots)),
             .markdown("起回间隔分段统计", Self.gapSegments(gaps)),
             .markdown("异常清单", LongTest.anomalyList(progress, markers: ["PANIC"])),
+            .log("板端 progress.log", progress),
         ]
         // pstore is attached only when a panic was detected.
         if progress.contains("PANIC") {

@@ -49,6 +49,8 @@ public enum AZ0X {
           --out <目录>                           报告与板端日志的落地目录
           --burnin-seconds <n>                   T06 每段时长，默认 43200
           --cycles <n>                           T07/T08 次数，默认 3000
+          --keep-board-logs                      保留运行中拉下来的板端原始日志目录；
+                                                 默认删掉，判定证据已在 run.json 里
 
         缩短时长的选项只为联机调试而存在。一次缩短的运行**不是**一次完整验证，
         报告会照实写明它只覆盖了什么。
@@ -172,6 +174,13 @@ public enum AZ0X {
             guard line != lastLine else { return }
             lastLine = line
             print(line)
+        }
+
+        // The board-side logs are pulled while the run is in flight so they can be looked at then.
+        // What the verdicts rest on is already in the record, so once that is written the working
+        // directory has done its job: the delivered folder is a report and a record, nothing else.
+        if let out, o.values["keep-board-logs"] == nil {
+            try? FileManager.default.removeItem(at: out.appendingPathComponent("logs"))
         }
 
         let report = ReportRenderer.render(run)

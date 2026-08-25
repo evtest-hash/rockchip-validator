@@ -69,10 +69,38 @@ enum LongTest {
     private static func evidence(from bt: BoardTest) async -> [Evidence] {
         let progress = await bt.read("progress.log")
         guard !progress.isEmpty else { return [] }
-        return [.log("板端 progress.log 尾部", tail(progress, 20))]
+        return [.log("板端 progress.log", progress)]
     }
 
     /// Board-side directory of each long-running item, plus any evidence paths outside it.
+    /// Collapses in-place terminal redraws to what each line finally said.
+    ///
+    /// `memtester` prints a line and then rewrites its counter in place, so twenty seconds of it
+    /// archives as 24 KB holding 24 real lines and eleven thousand backspaces. Storing that as
+    /// evidence would be storing terminal noise; extrapolated to twelve hours it is tens of
+    /// megabytes of it.
+    ///
+    /// Done here, at extraction, and never at render time: what reaches the record is already what
+    /// a person would have seen on the terminal.
+    static func normalize(_ raw: String) -> String {
+        var out: [String] = []
+        var line: [Character] = []
+        var cursor = 0
+        func flush() { out.append(String(line)); line = []; cursor = 0 }
+        for ch in raw {
+            switch ch {
+            case "\n": flush()
+            case "\r": cursor = 0
+            case "\u{8}": cursor = max(0, cursor - 1)
+            default:
+                if cursor < line.count { line[cursor] = ch } else { line.append(ch) }
+                cursor += 1
+            }
+        }
+        if !line.isEmpty { flush() }
+        return out.joined(separator: "\n")
+    }
+
     static func archiveSource(for code: String) -> (dir: String, extras: [String])? {
         switch code {
         case "T06": return ("\(BoardItems.boardRoot)/t06_burnin", [])
