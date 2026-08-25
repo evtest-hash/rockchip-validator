@@ -10,7 +10,7 @@ import PackageDescription
 
 let package = Package(
     name: "AZ0XValidator2",
-    platforms: [.macOS(.v12)],
+    platforms: [.macOS(.v13)],
     targets: [
         .target(
             name: "AZ0XCore",

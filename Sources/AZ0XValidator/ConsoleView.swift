@@ -1,157 +1,299 @@
 import SwiftUI
 import AZ0XCore
+import Combine
 
-/// Every batch, side by side, each board a row.
-///
-/// Nothing here waits on anything else: a batch is added while others run, and a board that reaches
-/// its end releases its socket without the rest of its batch being involved.
+/// The console: every batch at once. Home screen of the application.
 struct ConsoleView: View {
-    @EnvironmentObject var app: AppModel
+    @EnvironmentObject var app: AppState
+    /// Redraws the elapsed and idle texts, and the counts aggregated over live benches.
+    @State private var beat = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    @State private var tick = 0
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                if !app.missingTools.isEmpty {
-                    Callout(tint: Palette.fail, icon: "exclamationmark.triangle",
-                            text: "程序内嵌工具缺失：\(app.missingTools.joined(separator: "、"))"
-                                + "。补齐后才能开始验证。")
+        VStack(spacing: 0) {
+            HStack(spacing: 18) {
+                OverviewStrip(benches: app.allBenches)
+                Spacer()
+                Button { app.newBatch() } label: {
+                    Label("开始验证", systemImage: "plus")
                 }
-                if app.batches.isEmpty {
-                    Empty()
-                } else {
-                    ForEach(app.batches) { batch in
-                        BatchCard(batch: batch)
-                    }
-                }
+                .controlSize(.large)
+                .keyboardShortcut("n")
             }
-            .padding(16)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 11)
+            Divider()
+            batchList
         }
+        // Nothing reads the value; the redraw is the point — the elapsed and idle texts and
+        // the aggregate counts are all computed in the bodies below.
+        .onReceive(beat) { _ in tick &+= 1 }
     }
 
-    private struct Empty: View {
-        var body: some View {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("没有进行中的批次").font(.callout)
-                Text("将待测板置于 MASKROM 模式后，点右上角「开始验证」")
-                    .font(.callout).foregroundStyle(.secondary)
+    @ViewBuilder
+    private var batchList: some View {
+        if app.batches.isEmpty {
+            VStack(spacing: 10) {
+                Image(systemName: "tray")
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundStyle(.tertiary)
+                Text("没有进行中的批次")
+                    .foregroundStyle(.secondary)
+                Text("将待测板置于 MASKROM 模式后，点「开始验证」")
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(22)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    ForEach(app.batches) { batch in
+                        BatchCard(batch: batch,
+                                  onOpen: { bench, target in
+                                      bench.selection = target
+                                      app.openBench = bench.id
+                                  },
+                                  onAbortBatch: { })
+                    }
+                }
+                .padding(18)
+            }
         }
     }
 }
 
-/// One batch: its configuration, and a row per board.
-struct BatchCard: View {
-    @ObservedObject var batch: BatchState
-    @EnvironmentObject var app: AppModel
-    @State private var confirmingStop = false
+/// Counts across every batch: what needs the operator, at a glance.
+@MainActor
+private struct OverviewStrip: View {
+    let benches: [Bench]
+
+    var body: some View {
+        HStack(spacing: 18) {
+            // Three counts, each answering something the operator acts on: what is still
+            // occupying a socket, what is done with, and what needs looking into. Whether a
+            // finished board's material is acceptable is not shown here and is not ours to say.
+            stat("进行中", running, .accentColor)
+            stat("已结束", benches.filter(\.isFinished).count, .green)
+            stat("未得结果", withoutResult, .orange)
+        }
+    }
+
+    private var running: Int { benches.filter { !$0.isFinished }.count }
+
+    /// Ran but produced no conclusion: our environment, a precondition, or nothing arrived in
+    /// time. These are the ones worth investigating, possibly re-running. A board that produced a
+    /// finding — pass or fail — is done as far as this bench is concerned; the report carries it.
+    private var withoutResult: Int {
+        benches.filter { if case .noResult = $0.ending { return true } else { return false } }.count
+    }
+
+    private func stat(_ name: String, _ value: Int, _ color: Color) -> some View {
+        HStack(spacing: 6) {
+            Text("\(value)")
+                .font(.system(.headline, design: .rounded))
+                .foregroundStyle(color)
+                .monospacedDigit()
+            Text(name).font(.callout).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// One batch: its configuration in the header, its boards below.
+@MainActor
+private struct BatchCard: View {
+    @ObservedObject var batch: Batch
+    var onOpen: (Bench, Bench.Selection) -> Void
+    var onAbortBatch: () -> Void
+    @State private var confirmingAbort = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            if !batch.collapsed {
-                ForEach(batch.benches) { bench in
-                    Divider()
-                    BenchRow(bench: bench)
-                }
+            Divider()
+            ForEach(batch.benches) { bench in
+                BoardRow(bench: bench, onOpen: { onOpen(bench, $0) })
+                if bench.id != batch.benches.last?.id { Divider() }
             }
         }
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.22)))
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.025)))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.12)))
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Chip(text: batch.plan.model.rawValue, tint: .accentColor)
-            Chip(text: batch.plan.flow.displayName)
+        HStack(spacing: 10) {
+            Chip(text: batch.model.rawValue, color: .blue)
+            Chip(text: batch.flow.displayName, color: .secondary)
+            // A partial batch states its scope here rather than on every row.
             if batch.isPartial {
-                Chip(text: "抽测 · \(batch.scopeText)", tint: Palette.hold)
+                Chip(text: "抽测 · \(batch.scopeText)", color: .orange)
             }
             Text("开始于 \(batch.startedText)")
-                .font(.caption).foregroundStyle(.secondary)
-            Spacer(minLength: 8)
-            Text("\(batch.finishedCount)/\(batch.benches.count) 完成")
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-            Button(batch.collapsed ? "展开" : "收起") { batch.collapsed.toggle() }
-                .buttonStyle(.link).font(.caption)
-            if !batch.isRunning {
-                Button("清除") { app.batches.removeAll { $0.id == batch.id } }
-                    .buttonStyle(.link).font(.caption)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-    }
-}
-
-/// One board's line: who it is, where it is, and what it produced.
-struct BenchRow: View {
-    @ObservedObject var bench: BenchState
-    @EnvironmentObject var app: AppModel
-
-    private var mark: Mark {
-        if bench.refusedWhy != nil { return .noResult }
-        guard let run = bench.run else { return bench.startedAt == nil ? .notRun : .running }
-        if let stopped = run.stoppedAt, run.results[stopped]?.condemnsMaterial == true {
-            return .notPassed
-        }
-        return run.notRunItems.isEmpty ? .passed : .noResult
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            Rectangle().fill(mark.tint).frame(width: 4)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(bench.name).font(.system(.callout, design: .monospaced))
-                Text(bench.address.display).font(.caption).foregroundStyle(.secondary)
-            }
-            .frame(width: 190, alignment: .leading)
-            .padding(.leading, 11)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(bench.statusLine).font(.callout)
-                    if bench.isFinished || bench.runningCode == nil {
-                        Chip(text: mark.label, tint: mark.tint)
+                .font(.callout.weight(.semibold))
+            Spacer()
+            if batch.isRunning {
+                Button { confirmingAbort = true } label: {
+                    Text("终止批次").foregroundStyle(.red)
+                }
+                .font(.callout)
+                .controlSize(.small)
+                .buttonStyle(.bordered)
+                    // The costliest action in the application: it is the one place that
+                    // deliberately takes an extra step.
+                    .confirmationDialog("终止本批次？", isPresented: $confirmingAbort) {
+                        Button("终止 \(batch.runningCount) 块板", role: .destructive,
+                               action: onAbortBatch)
+                        Button("取消", role: .cancel) { }
+                    } message: {
+                        Text(abortWarning)
                     }
-                }
-                if let f = bench.fraction {
-                    ProgressView(value: f).controlSize(.small).frame(maxWidth: 340)
-                }
-                if let d = bench.detailLine {
-                    Text(d).font(.caption).foregroundStyle(.secondary)
-                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .trailing, spacing: 4) {
-                Button(bench.run == nil ? "查看" : "查看报告") { app.openBench = bench.id }
-                    .buttonStyle(.link).font(.callout)
-                    .disabled(bench.refusedWhy != nil)
-            }
-            .padding(.trailing, 12)
+            Text("\(batch.finishedCount)/\(batch.benches.count) 完成")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
-        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+    }
+
+    /// States the cost, since a burn-in cannot be resumed once stopped.
+    private var abortWarning: String {
+        "将终止 \(batch.runningCount) 块板，"
+            + "已运行 \(formatDuration(Date().timeIntervalSince(batch.startedAt)))。"
+            + Bench.abortConsequence
+    }
+
+}
+
+/// One board, with two entry points: the row shows what it is doing, 查看报告 shows the
+/// report. Fixed columns, so rows line up rather than drifting with the text length.
+@MainActor
+private struct BoardRow: View {
+    @ObservedObject var bench: Bench
+    var onOpen: (Bench.Selection) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button { onOpen(processTarget) } label: {
+                HStack(spacing: 14) {
+                    Text(bench.serial ?? "插座 \(bench.portChain)")
+                        .font(.system(.body, design: .monospaced))
+                        .frame(width: 200, alignment: .leading)
+                        .foregroundStyle(bench.serial == nil ? .secondary : .primary)
+                    stateCell
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Chip(text: chip.0, color: chip.1)
+                        .frame(width: 92, alignment: .leading)
+                }
+                .padding(.leading, 14)
+                .padding(.vertical, 9)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Outside the row's tap region, so the two destinations never conflict.
+            if bench.isFinished {
+                Button { onOpen(.summary) } label: {
+                    Text("查看报告 →")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+                .help("打开这块板的验证报告")
+            }
+        }
+        .padding(.trailing, 14)
+    }
+
+    /// Where the row lands: what the board is doing, or where it stopped.
+    private var processTarget: Bench.Selection {
+        if let code = bench.runningCode { return .item(code) }
+        if let code = bench.terminatedAt { return .item(code) }
+        if let last = bench.items.last(where: { bench.results[$0.code] != nil }) {
+            return .item(last.code)
+        }
+        return .summary
+    }
+
+    @ViewBuilder
+    private var stateCell: some View {
+        if bench.isFinished {
+            Text(finishedText).foregroundStyle(.secondary)
+        } else {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small).scaleEffect(0.7)
+                Text(runningText).foregroundStyle(livenessTint)
+            }
+        }
+    }
+
+    private var runningText: String {
+        guard let code = bench.runningCode, let item = bench.item(code) else {
+            return bench.maskromSeen ? "准备中" : "等待设备"
+        }
+        let head = "\(code) \(item.title)"
+        // Only flashing reports liveness; a long run is expected to be quiet.
+        switch bench.liveness {
+        case .late, .stalled: return head + " · 最后活跃 \(bench.idleText)"
+        case .normal, nil:    return head
+        }
+    }
+
+    /// Only an idle flash is coloured, and only because flashing is the one item where an idle
+    /// host clock means anything. Slow-but-reporting is stated, not flagged.
+    private var livenessTint: Color {
+        bench.liveness == .stalled ? .red : .secondary
+    }
+
+    /// The one-line fact under the chip: how the run ended, and how long it took.
+    ///
+    /// This is where "it stopped at T06" belongs — a fact about the run. The chip above stays at
+    /// 已结束 for it, because what T06 found is the report's business, not this row's.
+    private var finishedText: String {
+        let took = bench.totalDuration.map { " · 历时 \(formatDuration($0))" } ?? ""
+        switch bench.ending {
+        case let .aborted(at):  return "已手动终止于 \(at)\(took)"
+        case let .failed(at):   return "在 \(at) 得出结论后结束\(took)"
+        case let .noResult(at): return "未得结果，中止于 \(at)\(took)"
+        case .completed, .running:
+            return took.isEmpty ? "执行完毕" : "跑完全部选定项\(took)"
+        }
+    }
+
+    /// Where this bench's run got to — never what its material amounts to.
+    ///
+    /// A finished run says 已结束 whether or not the automation found something. Both mean the same
+    /// thing here: the flow did its job and the report is ready for whoever holds the requirements
+    /// table. Which way that report reads is theirs to decide, and putting 失败 on this row would be
+    /// this software claiming a material verdict it is not responsible for.
+    ///
+    /// The two that are not just "done" are the two an operator acts on: no result was produced, so
+    /// it may be worth investigating or re-running; or they stopped it themselves.
+    ///
+    /// A long run never reaches the idle branch: it has no liveness, because being quiet is what a
+    /// twelve-hour memory test looks like. It ends on a terminal marker or its budget instead.
+    private var chip: (String, Color) {
+        switch bench.ending {
+        case .running:
+            return bench.liveness == .stalled ? ("刷写无进度", .red) : ("验证中", .secondary)
+        case .aborted:              return ("已手动终止", .secondary)
+        case .noResult:             return ("未得结果", .orange)
+        case .completed, .failed:   return ("已结束", .green)
+        }
     }
 }
 
-/// A one-line notice with an icon, used for the few things the console has to say out loud.
-struct Callout: View {
-    let tint: Color
-    let icon: String
+/// Small status pill.
+struct Chip: View {
     let text: String
+    let color: Color
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: icon)
-            Text(text)
-        }
-        .font(.callout)
-        .foregroundStyle(tint)
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 7))
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.14), in: Capsule())
+            .foregroundStyle(color)
     }
 }

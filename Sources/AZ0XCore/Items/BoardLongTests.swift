@@ -178,7 +178,7 @@ extension BoardItems {
                     phase: "板子离线（休眠中）已 \(formatDuration(away))",
                     elapsed: Date().timeIntervalSince(started),
                     scale: .count(done: Double(seen.value), target: Double(targetCycles)),
-                    logTail: ""))
+                    logTail: "", awayFor: away))
             }
         })
 
@@ -290,7 +290,7 @@ extension BoardItems {
                     phase: "板子离线（重启中）已 \(formatDuration(away))",
                     elapsed: Date().timeIntervalSince(started),
                     scale: .count(done: Double(seen.value), target: Double(targetBoots)),
-                    logTail: ""))
+                    logTail: "", awayFor: away))
             }
         })
 

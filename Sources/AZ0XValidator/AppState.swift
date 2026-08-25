@@ -7,12 +7,9 @@ import AZ0XCore
 /// them all at once, keeping two benches off one board — belongs to the core and is only called
 /// from here.
 @MainActor
-final class AppModel: ObservableObject {
+final class AppState: ObservableObject {
 
-    enum Screen: Equatable {
-        case console
-        case newBatch(step: Int)
-    }
+    enum Screen: Equatable { case console, newBatch }
 
     @Published var screen: Screen = .console
 
@@ -24,19 +21,19 @@ final class AppModel: ObservableObject {
     /// Device ids the operator has ticked.
     @Published var confirmed: Set<String> = []
 
-    @Published var batches: [BatchState] = []
+    @Published var batches: [Batch] = []
     /// Which board's pages are open; nil shows the console.
     @Published var openBench: UUID?
 
     // What the bus looks like, sampled while the wizard is open.
     @Published var attached: [MaskromScan.Board] = []
     @Published var isScanning = false
-    /// Boards this process is already driving, read from the registry rather than kept in parallel
-    /// with it — two records of the same fact is how the previous generation's lists came to
-    /// disagree with its own admission rule.
+    /// Boards this process is already driving, read from the registry rather than kept alongside it:
+    /// two records of one fact is how the previous generation's list came to disagree with its own
+    /// admission rule.
     @Published private var inUse: Set<String> = []
 
-    /// Missing bundled tools. Nothing can run without them, so it is said on the console.
+    /// Bundled tools this build is missing. Nothing can run without them.
     let missingTools = MaskromScan.missingTools
 
     /// The one registry for this process, so a second batch cannot take a board the first is on.
@@ -54,30 +51,34 @@ final class AppModel: ObservableObject {
     var resolvedItems: [TestItem] {
         TestItem.resolveSelection(picked, flow: flow, model: model)
     }
-
     var isPartialRun: Bool {
         TestItem.isPartial(resolvedItems, flow: flow, model: model,
                            burninPhases: burninPhases.count)
     }
-
     var hasLongRun: Bool { resolvedItems.contains(where: \.isLongRunning) }
 
-    /// What this batch will ask of each board, in the unit each item is actually bounded by.
-    var scaleSummary: [(String, String)] {
-        var out: [(String, String)] = []
+    var allBenches: [Bench] { batches.flatMap(\.benches) }
+
+    /// What this batch asks of each board, in the unit each item is actually bounded by.
+    ///
+    /// The previous generation reported T07 and T08 in hours, taken from how long the host was
+    /// willing to wait — a figure that said nothing about the standard and stopped being true the
+    /// moment a board cycled at a different speed.
+    var estimatedDuration: String {
+        var parts: [String] = []
         if resolvedItems.contains(where: { $0.code == "T06" }) {
-            out.append(("拷机", TestItem.hoursText(Thresholds.longRunSeconds * burninPhases.count)))
+            parts.append("拷机 \(TestItem.hoursText(Thresholds.longRunSeconds * burninPhases.count))")
         }
         if resolvedItems.contains(where: { $0.code == "T07" }) {
-            out.append(("休眠唤醒", "\(Thresholds.longRunCycles) 次"))
+            parts.append("休眠唤醒 \(Thresholds.longRunCycles) 次")
         }
         if resolvedItems.contains(where: { $0.code == "T08" }) {
-            out.append(("重启", "\(Thresholds.longRunCycles) 次"))
+            parts.append("重启 \(Thresholds.longRunCycles) 次")
         }
         if resolvedItems.contains(where: { $0.code == "E05" }) {
-            out.append(("eMMC 拷机", "\(Thresholds.emmcTargetN) 次全盘写"))
+            parts.append("eMMC 拷机 \(Thresholds.emmcTargetN) 次全盘写")
         }
-        return out
+        return parts.isEmpty ? "本次不含长测项" : parts.joined(separator: "；")
     }
 
     // MARK: - Which boards this batch may take
@@ -90,19 +91,11 @@ final class AppModel: ObservableObject {
         attached.filter { $0.matches(model) && !inUse.contains($0.deviceID) }
     }
 
-    /// Boards left out, so their absence is accounted for rather than mysterious. Counted from the
-    /// same values the list above filters on, so the two cannot describe different sets.
-    var excluded: (inUse: Int, otherModel: Int) {
+    /// Boards left out, counted from the same values the list above filters on, so the explanation
+    /// cannot describe a different set than the rows beside it.
+    var excludedCounts: (claimed: Int, otherModel: Int) {
         let mine = attached.filter { $0.matches(model) }
         return (mine.filter { inUse.contains($0.deviceID) }.count, attached.count - mine.count)
-    }
-
-    var excludedNote: String {
-        let (used, others) = excluded
-        var parts: [String] = []
-        if others > 0 { parts.append("\(others) 块其它型号") }
-        if used > 0 { parts.append("\(used) 块已在其它批次中") }
-        return parts.isEmpty ? "" : "另有 " + parts.joined(separator: "、") + "，不在本批次候选内"
     }
 
     // MARK: - Transitions
@@ -116,9 +109,9 @@ final class AppModel: ObservableObject {
         isScanning = false
     }
 
-    func openNewBatch() {
+    func newBatch() {
         confirmed = Set(candidates.map(\.deviceID))
-        screen = .newBatch(step: 1)
+        screen = .newBatch
     }
 
     func cancelNewBatch() {
@@ -126,7 +119,7 @@ final class AppModel: ObservableObject {
         screen = .console
     }
 
-    /// Starts a batch on exactly the boards ticked here, and nothing else afterwards changes that.
+    /// Starts a batch on exactly the boards ticked here; nothing afterwards changes that.
     func startBatch(root: URL = ArchiveRoot.default) {
         let boards = candidates.filter { confirmed.contains($0.deviceID) }
             .map { BoardAddress.maskrom($0.deviceID) }
@@ -139,7 +132,7 @@ final class AppModel: ObservableObject {
 
         let plan = BatchPlan(batchID: batchID, model: model, flow: flow,
                              items: resolvedItems, burninPhases: burninPhases, boards: boards)
-        let batch = BatchState(plan: plan, folder: folder)
+        let batch = Batch(plan: plan, folder: folder)
         batches.append(batch)
         confirmed = []
         screen = .console
@@ -150,7 +143,7 @@ final class AppModel: ObservableObject {
     /// Hands the batch to the core and folds what comes back into observable state.
     ///
     /// The engine emits and forgets; everything main-actor stops here.
-    private func drive(_ batch: BatchState) {
+    private func drive(_ batch: Batch) {
         guard let runner = BatchRunner.live(plan: batch.plan, registry: registry,
                                             folder: batch.folder) else { return }
         Task { [weak self] in
@@ -161,7 +154,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func receive(_ event: BatchEvent, in batch: BatchState) {
+    private func receive(_ event: BatchEvent, in batch: Batch) {
         switch event {
         case let .refused(board, why):
             batch.bench(board)?.refuse(why)
@@ -172,9 +165,13 @@ final class AppModel: ObservableObject {
         case let .benchFinished(board, run, folder):
             guard let bench = batch.bench(board) else { return }
             bench.apply(.finished(run))
+            bench.runFolder = folder
             // Written here rather than in the engine: rendering is presentation, and the same
             // function writes it for the command line.
-            if let folder { bench.reportURL = RunStore.write(run, into: folder) }
+            if let folder {
+                if let url = RunStore.write(run, into: folder) { bench.reportURL = url }
+                else { bench.reportError = "无法写入 \(folder.lastPathComponent)" }
+            }
         case .finished:
             break
         }

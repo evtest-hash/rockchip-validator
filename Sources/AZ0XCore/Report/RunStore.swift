@@ -31,6 +31,23 @@ public enum RunStore {
                 != nil else { return nil }
         return url
     }
+
+    /// Copies a finished report where the operator looks for things to send.
+    ///
+    /// The archive lives under Documents because that is where a record belongs; a report gets
+    /// forwarded from the Downloads folder, so it is offered there too rather than asking someone
+    /// to go and find it.
+    public static func copyToDownloads(_ report: URL?) throws -> URL {
+        guard let report else { throw CocoaError(.fileNoSuchFile) }
+        let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
+        let target = downloads.appendingPathComponent(report.lastPathComponent)
+        if FileManager.default.fileExists(atPath: target.path) {
+            try FileManager.default.removeItem(at: target)
+        }
+        try FileManager.default.copyItem(at: report, to: target)
+        return target
+    }
 }
 
 /// What is plugged in right now.

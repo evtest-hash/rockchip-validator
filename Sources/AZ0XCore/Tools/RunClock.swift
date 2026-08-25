@@ -2,11 +2,11 @@ import Foundation
 
 /// Monotonic seconds and delays for the polling loops.
 ///
-/// Named `RunClock` rather than `Clock` on purpose: Swift's own `Clock` protocol exists in the SDK
-/// from macOS 13, and a module-local type of the same name would shadow it for every later reader.
-/// It also would not help — the standard library ships `ContinuousClock` and `SuspendingClock` but
-/// no test clock, so a virtual one has to be written either way, which is why this seam does not
-/// depend on raising the deployment target.
+/// Named `RunClock` rather than `Clock` on purpose: Swift's own `Clock` protocol is available at the
+/// deployment target, so a module-local type of that name would shadow it for every later reader.
+/// Conforming to it would not help either — the standard library ships `ContinuousClock` and
+/// `SuspendingClock` but no test clock, so a virtual one has to be written whichever protocol this
+/// seam is spelled against.
 ///
 /// This is not a convenience. Without it the only thing a test can reach is a loop that finds its
 /// answer on the first or second poll, and a real long run polls thousands of times across many

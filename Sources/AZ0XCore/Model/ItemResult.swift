@@ -101,8 +101,6 @@ public struct ItemResult: Codable, Equatable {
     public var startedAt: Date?
     public var finishedAt: Date?
 
-    /// Present only for the long-running items.
-    public var progress: LongTestProgress?
 
     public init(code: String) { self.code = code }
 

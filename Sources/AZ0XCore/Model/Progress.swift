@@ -54,6 +54,10 @@ public struct LongTestProgress: Codable, Equatable {
     public var elapsed: TimeInterval
     public var scale: Scale
     public var logTail: String = ""
+    /// Seconds the board has been off the bus, when it is. A fact, recorded so a caller can say it
+    /// rather than infer it from the phase text — and never a flag: being away is what a reboot or
+    /// a suspend looks like from here.
+    public var awayFor: TimeInterval?
 
     public var fraction: Double {
         switch scale {

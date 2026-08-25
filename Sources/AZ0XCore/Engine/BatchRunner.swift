@@ -21,7 +21,16 @@ public enum BoardAddress: Equatable, Hashable {
         }
     }
 
-    /// What an operator reads. The socket is the half of a device id that names a physical position.
+    /// The physical position: the half of a device id that names a socket. Empty for a board
+    /// addressed by serial, which says nothing about where it is plugged.
+    public var socket: String {
+        switch self {
+        case let .maskrom(id): return DdrCli.socket(id)
+        case .flashed:         return ""
+        }
+    }
+
+    /// What an operator reads.
     public var display: String {
         switch self {
         case let .maskrom(id):     return "插座 \(DdrCli.socket(id))"
