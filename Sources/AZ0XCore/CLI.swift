@@ -147,7 +147,16 @@ public enum AZ0X {
                                   flashTool: FlashTool(),
                                   archiveFolder: out)
 
-        let run = await validator.run { print(line(for: $0)) }
+        // Progress arrives many times a second; only a line that says something new is printed.
+        // Without this, flashing filled the terminal with identical lines and a long run would bury
+        // the item results that actually matter between them.
+        var lastLine = ""
+        let run = await validator.run { event in
+            let line = self.line(for: event)
+            guard line != lastLine else { return }
+            lastLine = line
+            print(line)
+        }
 
         let report = ReportRenderer.render(run)
         if let out {
@@ -180,7 +189,7 @@ public enum AZ0X {
             let detail = result.detail.map { "：\($0)" } ?? ""
             return "  \(item.code) \(result.label)\(detail)"
         case let .step(step):
-            return "  \(step.label) \(step.sizeText)"
+            return "  \(step.label) \(step.valueText)"
         case let .longTest(code, p):
             return "  \(code) \(p.phase) \(p.progressText)"
         case let .finished(run):

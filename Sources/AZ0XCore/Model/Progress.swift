@@ -18,12 +18,20 @@ struct StepProgress: Equatable {
         return min(1, max(0, Double(done) / Double(total)))
     }
 
-    /// In decimal MB, to match the image size published by CI.
-    var sizeText: String {
-        guard metric == .bytes else { return "" }
-        func mb(_ b: Int64) -> String { String(format: "%.1f MB", Double(b) / 1_000_000) }
-        guard let total else { return mb(done) }
-        return "\(mb(done)) / \(mb(total))"
+    /// How far along, in the step's own unit.
+    ///
+    /// Bytes are decimal MB, to match the image size published by CI. The percent case used to
+    /// return an empty string, so flashing printed its label and nothing else — twenty-odd bare
+    /// `刷入镜像` lines for a run that was in fact reporting progress the whole time.
+    var valueText: String {
+        switch metric {
+        case .percent:
+            return total == nil ? "…" : "\(done)%"
+        case .bytes:
+            func mb(_ b: Int64) -> String { String(format: "%.1f MB", Double(b) / 1_000_000) }
+            guard let total else { return mb(done) }
+            return "\(mb(done)) / \(mb(total))"
+        }
     }
 }
 
