@@ -151,10 +151,6 @@ public struct Validator {
 
     /// A sequence that cannot work is refused before a board is touched.
     private func sequenceRefusal() -> String? {
-        if plan.flow == .emmc {
-            // Stated plainly rather than letting each eMMC item report its own confusion.
-            return "eMMC 流程尚未接入本引擎。"
-        }
         if plan.items.contains(where: { $0.domain == .board }),
            !plan.items.contains(where: { TestItem.flashCodes.contains($0.code) }),
            plan.boardSerial == nil {
@@ -205,6 +201,7 @@ public struct Validator {
 
         let maskrom = MaskromItems(cli: tool, model: plan.model, deviceID: plan.deviceID)
         var board: BoardItems?
+        var emmc: EmmcItems?
 
         for item in plan.items {
             if Task.isCancelled { return }
@@ -254,9 +251,10 @@ public struct Validator {
                                    channels: state.measurementInt("T01", "通道数"),
                                    busBitsPerChannel: state.measurementInt("T01", "每通道位宽"),
                                    clock: clock)
+                emmc = EmmcItems(adb: adb, clock: clock)
             }
 
-            var result = await execute(item, maskrom: maskrom, board: board,
+            var result = await execute(item, maskrom: maskrom, board: board, emmc: emmc,
                                        state: state, onEvent: onEvent)
             result.startedAt = startedAt
             result.finishedAt = Date()
@@ -278,6 +276,7 @@ public struct Validator {
     private func execute(_ item: TestItem,
                          maskrom: MaskromItems,
                          board: BoardItems?,
+                         emmc: EmmcItems?,
                          state: State,
                          onEvent: @escaping (RunEvent) -> Void) async -> ItemResult {
         let long: (LongTestProgress) -> Void = { onEvent(.longTest(code: item.code, $0)) }
@@ -317,11 +316,25 @@ public struct Validator {
             case "T07": return await board.runT07(targetCycles: plan.cycles, onProgress: long)
             case "T08": return await board.runT08(targetBoots: plan.cycles, onProgress: long)
             default:
-                // Unreachable: an eMMC plan is refused in `sequenceRefusal`. Kept explicit so the
-                // gap is visible here rather than looking like an oversight.
-                var r = ItemResult(code: item.code)
-                r.interrupted("eMMC 流程尚未接入本引擎")
-                return r
+                guard let emmc else {
+                    var r = ItemResult(code: item.code)
+                    r.interrupted("eMMC 测试未就绪（adb 未连上）")
+                    return r
+                }
+                switch item.code {
+                case "E02": return await emmc.runE02()
+                case "E03": return await emmc.runE03()
+                case "E04": return await emmc.runE04()
+                case "E05": return await emmc.runE05(targetN: plan.emmcTargetN, onProgress: long)
+                // The same four cases as E03 with the same parameters, so the pair can be compared.
+                // Its baseline is E03's readings, which is why it reads them out of the record
+                // rather than measuring twice.
+                case "E06": return await emmc.runE06(baseline: state.perfBaseline())
+                default:
+                    var r = ItemResult(code: item.code)
+                    r.interrupted("本引擎不认识测试项 \(item.code)")
+                    return r
+                }
             }
         }
     }
@@ -380,6 +393,15 @@ extension Validator {
         var abortedAt: String?
 
         init(plan: RunPlan) {}
+
+        /// E03's four readings, so E06 can put them side by side with its own.
+        func perfBaseline() -> [String: Double] {
+            var out: [String: Double] = [:]
+            for m in results["E03"]?.measurements ?? [] {
+                if case let .number(v, unit) = m.value, unit == "MB/s" { out[m.name] = v }
+            }
+            return out
+        }
 
         func measurementInt(_ code: String, _ name: String) -> Int? {
             guard let m = results[code]?.measurements.first(where: { $0.name == name }),

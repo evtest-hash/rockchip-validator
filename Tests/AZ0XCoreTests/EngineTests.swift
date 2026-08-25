@@ -206,11 +206,25 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(ReportRenderer.render(run).contains("抽测"), "只跑一部分必须写明是抽测")
     }
 
-    func testAnEmmcPlanIsRefusedPlainly() async {
-        let (run, _) = await execute(plan(items: TestItem.emmcItems, flow: .emmc),
-                                     tool: tool(), board: ScriptedBench.board())
-        XCTAssertTrue(run.results["E01"]?.detail?.contains("尚未接入") == true,
-                      String(describing: run.results["E01"]?.detail))
+    func testAnEmmcPlanRunsItsOwnItems() async {
+        var p = RunPlan(batchID: "AZ08-EMMC-20260825", model: .az08, flow: .emmc,
+                        items: TestItem.emmcItems, burninPhases: Set(BurninPhase.allCases),
+                        deviceID: "002-1.4-2207-350e-NA")
+        p.emmcTargetN = 20
+        let board = ScriptedEmmc.board()
+        let v = Validator(plan: p, tool: tool(), boardSession: { _ in board },
+                          flashTool: ScriptedFlasher(), clock: SimClock())
+        let run = await v.run { _ in }
+
+        XCTAssertNil(run.stoppedAt, String(describing: run.results.values.first?.detail))
+        for code in ["E01", "E02", "E04", "E05"] {
+            XCTAssertEqual(run.results[code]?.verdict, .passed,
+                           "\(code)：\(String(describing: run.results[code]?.detail))")
+        }
+        // Measured, never judged — the same shape T01 and T05 have in the DDR flow.
+        XCTAssertEqual(run.results["E03"]?.verdict, .noCriterion)
+        XCTAssertEqual(run.results["E06"]?.verdict, .noCriterion)
+        XCTAssertTrue(board.unmatched.isEmpty, "场景没覆盖：\(board.unmatched)")
     }
 
     // MARK: - The record it produces

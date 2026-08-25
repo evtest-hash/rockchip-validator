@@ -7,6 +7,9 @@ TARGET_N=${1:-20}; DIRNUM=${2:-5}; SETTLE=${3:-1}
 
 mkdir -p $D $SRC $DEST $MD5
 log(){ echo "$(date +%s) $*" >> $D/progress.log; }
+# Our own pid, so the host can ask whether this script is still running rather than guessing from
+# how long it has been quiet. A full-device write pass is slow by nature; silence proves nothing.
+echo $$ > $D/pid
 # The last line this script writes is always a terminal marker. ABORTED is the default: an exit
 # path nobody classified lands on 未得结果, never on a false verdict against the material.
 die(){ log "ABORTED $*"; exit 0; }
