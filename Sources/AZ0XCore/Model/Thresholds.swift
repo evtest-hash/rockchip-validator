@@ -22,8 +22,21 @@ enum Thresholds {
 
     // MARK: - Per-item acceptance limits
 
-    /// T08: upper bound on the longest boot-to-boot gap, in seconds.
-    static let t08MaxBootGapSeconds = 300
+    /// The longest a board may be off the bus, in seconds.
+    ///
+    /// One number with two uses, because they are the same question asked from two seats. As T08's
+    /// criterion it bounds the boot-to-boot gap the board records itself. As the host's limit it
+    /// bounds how long the host keeps waiting for a board that has stopped answering — past this
+    /// point that criterion is already decided, so waiting longer buys nothing.
+    ///
+    /// Two separate figures were drafted for these and they contradicted each other: the host would
+    /// patiently wait out a gap that the verdict then called a defect, and a board whose reboots ran
+    /// between the two numbers was carried to the end only to be failed for it. Whether a slow
+    /// reboot is acceptable is one question and gets one answer.
+    ///
+    /// T07 shares it. "How long may this board be absent before it is not coming back" does not
+    /// change because the board is suspended rather than rebooting.
+    static let maxOfflineSeconds = 300
 
     /// T06 scaling phase: tolerance between the last frequency switch and the end of the phase.
     static func scaleContinuityTolerance(flushInterval: Int) -> Int {
@@ -40,18 +53,6 @@ enum Thresholds {
     /// that both "survived 12 hours" may have done 2571 and 1700 cycles, which the report could not
     /// tell apart while the count was only a measurement.
     static let longRunCycles = 3_000
-
-    /// How long the host waits on a count-bounded item before giving up. **Not an acceptance
-    /// standard**: T07 and T08 are judged on cycles alone and no clock enters their verdict. This
-    /// only decides when the bench stops waiting and says 未得结果, which it must do — otherwise a
-    /// board that died mid-item leaves the polling loop running forever and no report is produced.
-    ///
-    /// A board is never stopped by it: the payloads run to their target count whatever the clock
-    /// says. Exceeding this means we stopped watching, so the result carries the achieved count and
-    /// can never read as a defect. For T08 the reboot service is still removed on the way out.
-    ///
-    /// Its own literal rather than sharing `longRunSeconds`, so moving one cannot move the other.
-    static let longRunPatienceSeconds = 43_200
 
     /// Slack added to a long run's declared duration before the host stops waiting, in seconds.
     ///

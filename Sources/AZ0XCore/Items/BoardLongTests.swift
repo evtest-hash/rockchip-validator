@@ -31,8 +31,8 @@ extension BoardItems {
         let wait = await bt.waitDone(
             doneMarker: "ALLDONE",
             pollSeconds: 10,
-            deadline: BoardTest.budget(wallClock: durationSeconds,
-                                       phases: phases.count)) { log in
+            patience: .untilDeclaredDuration(
+                BoardTest.budget(wallClock: durationSeconds, phases: phases.count))) { log in
             Task { @MainActor in
                 onProgress?(LongTestProgress(
                     phase: Self.t06Phase(log, requested: phases),
@@ -139,12 +139,17 @@ extension BoardItems {
                                         into: &r) else { return r }
 
         let started = Date()
+        // The count last read, so an offline line keeps reporting the same one instead of dropping
+        // to zero: the board is away, not back at the beginning.
+        let seen = LastCount()
         let wait = await bt.waitDone(
             doneMarker: "ALLDONE", pollSeconds: 10,
-            // Our patience, not a standard: the verdict is decided by the count alone. The board
-            // is not stopped by this — it runs to its target whatever the clock says.
-            deadline: BoardTest.budget(wallClock: Thresholds.longRunPatienceSeconds)) { log in
+            // No clock, and no view on how fast a cycle should be: the host waits while the
+            // board still has the suspend loop running.
+            patience: .whileTestIsRunning({ await bt.payloadAlive() }),
+            onTick: { log in
             let cycles = RE.all(#"cycle (\d+)"#, in: log).compactMap(Int.init).last ?? 0
+            seen.value = cycles
             Task { @MainActor in
                 onProgress?(LongTestProgress(
                     phase: "RTC 唤醒 + pm-suspend 循环",
@@ -152,7 +157,16 @@ extension BoardItems {
                     scale: .count(done: Double(cycles), target: Double(targetCycles)),
                     logTail: LongTest.tail(log, 18)))
             }
-        }
+        },
+            onOffline: { away in
+            Task { @MainActor in
+                onProgress?(LongTestProgress(
+                    phase: "板子离线（休眠中）已 \(formatDuration(away))",
+                    elapsed: Date().timeIntervalSince(started),
+                    scale: .count(done: Double(seen.value), target: Double(targetCycles)),
+                    logTail: ""))
+            }
+        })
 
         // The polling outcome must be handled.
         if let bad = await LongTest.settleOrFail(wait, bt, into: &r) { return bad }
@@ -212,13 +226,15 @@ extension BoardItems {
                            payload: payload, clock: clock)
         let initd = "/etc/init.d/S99-az0x-reboot"
 
-        r = await rebootRun(bt, targetBoots: targetBoots, onProgress: onProgress, into: r)
-        await Self.removeRebootService(adb: adb, dir: bt.directory, initd: initd, into: &r)
+        r = await rebootRun(bt, targetBoots: targetBoots, initd: initd,
+                            onProgress: onProgress, into: r)
+        await Self.removeRebootService(adb: adb, dir: bt.directory, initd: initd,
+                                       clock: clock, into: &r)
         return r
     }
 
     /// The body of T08. Never call this directly: `runT08` owns removing the init service.
-    private func rebootRun(_ bt: BoardTest, targetBoots: Int,
+    private func rebootRun(_ bt: BoardTest, targetBoots: Int, initd: String,
                            onProgress: ((LongTestProgress) -> Void)?,
                            into result: ItemResult) async -> ItemResult {
         var r = result
@@ -228,12 +244,16 @@ extension BoardItems {
         }
 
         let started = Date()
-        // The board is off for much of this run, so only the terminal marker or the budget ends it.
+        let seen = LastCount()
+        // The board is off for much of this run, so only the terminal marker ends it — or the
+        // reboot service being gone, which says the test is no longer set up to continue. How long
+        // any one reboot takes is the board's business and is never asked.
         let wait = await bt.waitDone(
             doneMarker: "STOP", pollSeconds: 15,
-            // Our patience, not a standard; the count alone decides the verdict.
-            deadline: BoardTest.budget(wallClock: Thresholds.longRunPatienceSeconds)) { log in
+            patience: .whileTestIsRunning({ await bt.rebootServiceArmed(initd: initd) }),
+            onTick: { log in
             let boots = RE.all(#"boot (\d+)"#, in: log).compactMap(Int.init).last ?? 0
+            seen.value = boots
             Task { @MainActor in
                 onProgress?(LongTestProgress(
                     phase: "自启服务反复重启",
@@ -241,7 +261,16 @@ extension BoardItems {
                     scale: .count(done: Double(boots), target: Double(targetBoots)),
                     logTail: LongTest.tail(log, 18)))
             }
-        }
+        },
+            onOffline: { away in
+            Task { @MainActor in
+                onProgress?(LongTestProgress(
+                    phase: "板子离线（重启中）已 \(formatDuration(away))",
+                    elapsed: Date().timeIntervalSince(started),
+                    scale: .count(done: Double(seen.value), target: Double(targetBoots)),
+                    logTail: ""))
+            }
+        })
 
         if let bad = await LongTest.settleOrFail(wait, bt, into: &r) { return bad }
 
@@ -261,7 +290,7 @@ extension BoardItems {
         r.criteria = [
             // An unexplained panic under reboot cycling is what this item screens for.
             .equals("pstore panic", progress.contains("PANIC") ? 1 : 0, 0),
-            .lessThan("最长起回间隔", maxGap, Thresholds.t08MaxBootGapSeconds, unit: "s"),
+            .lessThan("最长起回间隔", maxGap, Thresholds.maxOfflineSeconds, unit: "s"),
             .isTrue("跑满目标重启次数", boots >= targetBoots, expected: "≥ \(targetBoots) 次"),
         ]
         r.validity = [
@@ -297,11 +326,12 @@ extension BoardItems {
 
     /// Removes the reboot init service and confirms the removal.
     private static func removeRebootService(adb: any BoardSession, dir: String, initd: String,
+                                           clock: any RunClock,
                                            into r: inout ItemResult) async {
         var removed = false
         for attempt in 1...10 {
             // The board may be rebooting; wait up to 60 s each time.
-            if !(await adb.waitOnline(timeout: 60)), attempt < 10 {
+            if !(await adb.waitOnline(timeout: 60, clock: clock)), attempt < 10 {
                 continue
             }
             _ = await adb.sh("echo manual > \(dir)/stop; rm -f \(initd); sync")

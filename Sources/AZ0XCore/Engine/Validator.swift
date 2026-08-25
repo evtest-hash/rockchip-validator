@@ -143,7 +143,9 @@ struct Validator {
     private func runItems(_ state: inout State,
                           onEvent: @escaping (RunEvent) -> Void) async {
         let power = PowerAssertion()
-        power.begin(reason: "AZ0X 物料验证进行中（长测可达 60 小时）")
+        // No hours named: T07 and T08 are bounded by a count, so how long a run takes is the
+        // board's to determine and is not known when it starts.
+        power.begin(reason: "AZ0X 物料验证进行中（长测）")
         defer { power.end() }
 
         let maskrom = MaskromItems(cli: tool, model: plan.model, deviceID: plan.deviceID)

@@ -49,7 +49,7 @@ final class EngineTests: XCTestCase {
     /// The regression this whole iteration exists to prevent, at the level that decides it.
     ///
     /// T05 is record-only and has seven ways to fail on our side. Here the firmware has no
-    /// `stress-ng`, and the engine must carry straight on into the twelve-hour items.
+    /// `stress-ng`, and the engine must carry straight on into the long items.
     func testTheEngineCarriesOnPastARecordOnlyItemThatCouldNotBeMeasured() async {
         let board = ScriptedBench.board(t05Missing: true)
         let (run, events) = await execute(plan(items: Array(TestItem.ddrItems.prefix(6))),

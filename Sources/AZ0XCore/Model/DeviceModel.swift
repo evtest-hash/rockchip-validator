@@ -106,15 +106,4 @@ enum ValidationFlow: String, CaseIterable, Identifiable, Codable {
         case .emmc: return "eMMC 验证"
         }
     }
-
-    /// Machine time of a long-run item, in seconds.
-    static func setSeconds(_ code: String, burninPhases: Int) -> Int? {
-        switch code {
-        case "T06": return Thresholds.longRunSeconds * max(1, burninPhases)
-        // T07 and T08 are bounded by a count, so their wall clock is not known in advance. The
-        // cap is the honest figure: an upper bound on how long the bench will wait, not a promise.
-        case "T07", "T08": return Thresholds.longRunPatienceSeconds
-        default: return nil
-        }
-    }
 }

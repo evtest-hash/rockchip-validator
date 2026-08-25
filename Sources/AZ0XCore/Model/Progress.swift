@@ -76,6 +76,14 @@ struct LongTestProgress: Codable, Equatable {
     }
 }
 
+/// The most recent count read from a board, shared between the two progress callbacks of one item.
+///
+/// A reference so both closures see the same value: an offline line must keep showing the count
+/// reached rather than starting again from zero, which reads as if the run had restarted.
+final class LastCount: @unchecked Sendable {
+    var value = 0
+}
+
 /// Timestamp as the operator reads it, in one place.
 let operatorStamp: DateFormatter = {
     let f = DateFormatter()

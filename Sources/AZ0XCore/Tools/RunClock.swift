@@ -9,11 +9,11 @@ import Foundation
 /// depend on raising the deployment target.
 ///
 /// This is not a convenience. Without it the only thing a test can reach is a loop that finds its
-/// answer on the first or second poll, and a real long run polls about 4 300 times over twelve
-/// hours. The behaviour that matters — that all that accumulated time is still inside the budget,
-/// so a healthy board is not reported as 未得结果 — is unreachable at wall clock. What a virtual
-/// clock removes is the waiting, never the logic: the loop still runs every iteration, still
-/// accumulates, still compares against the budget, still decides. See docs/architecture.md 第 4 章.
+/// answer on the first or second poll, and a real long run polls thousands of times across many
+/// hours. The behaviour that matters — that a board is carried all the way to its own end and a
+/// healthy one is never reported as 未得结果 — is unreachable at wall clock. What a virtual clock
+/// removes is the waiting, never the logic: the loop still runs every iteration, still reads the
+/// board, still decides. See docs/architecture.md 第 4 章.
 protocol RunClock {
     /// Seconds on a monotonic scale. Only differences are meaningful.
     var now: TimeInterval { get }

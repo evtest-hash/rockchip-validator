@@ -40,7 +40,7 @@ enum LongTest {
             r.interrupted("板端报告无法继续：\(why)")
             r.evidence = await evidence(from: bt)
             return r
-        case let .timedOut(why):
+        case let .stopped(why):
             r.interrupted(why)
             r.evidence = await evidence(from: bt)
             return r
@@ -48,7 +48,7 @@ enum LongTest {
             guard await bt.settle() else {
                 // The board finished; only our way back to it failed. That is `indeterminate`, not
                 // `error`, so the report says 已执行完毕，但未能读出判据 instead of 中止 — the
-                // difference between re-reading a board and re-running twelve hours on it. The
+                // difference between re-reading a board and running the whole item again. The
                 // message states that sleep is excluded.
                 r.invalid("板端已完成，但 adb 未在 "
                                  + "\(Int(Thresholds.settleSeconds))s（不含休眠）内恢复，"

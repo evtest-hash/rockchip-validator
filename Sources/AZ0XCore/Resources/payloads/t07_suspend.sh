@@ -4,6 +4,10 @@ D=/userdata/az0x-ddr/t07_suspend; TARGET=${1:-3000}; DWELL=${2:-10}
 # Kernel suspend statistics.
 PS=/sys/power/suspend_stats
 log(){ echo "$(date +%s) $*" >> $D/progress.log; }
+# Our own pid, so the host can ask whether this script is still running instead of guessing
+# from how long it has been quiet. Suspending is silent by nature and says nothing about
+# health; a pid that no longer exists does.
+echo $$ > $D/pid
 cat /proc/sys/kernel/random/boot_id > $D/boot; sync
 # success is the kernel's count of successful suspends and cannot be forged from user space.
 S0=$(cat $PS/success 2>/dev/null || echo 0)

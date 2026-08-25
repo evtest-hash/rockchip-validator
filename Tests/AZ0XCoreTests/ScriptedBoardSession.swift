@@ -4,7 +4,8 @@ import Foundation
 /// A board that answers from a declared scenario instead of from hardware.
 ///
 /// The second implementation of `BoardSession`, which is what makes the flow and the verdicts testable
-/// at all: a real board takes twelve hours per item, and the branches that matter are the ones a
+/// at all: a real long item runs for hours or for thousands of cycles, and the branches that
+/// matter are the ones a
 /// healthy board never takes. This is the shape PyVISA's `@sim` backend uses — behaviour declared as
 /// data, matched against the request — and deliberately **not** a shell interpreter. Interpreting
 /// shell would mean this file encodes a belief about what the board does; declaring answers means
@@ -35,8 +36,8 @@ final class ScriptedBoardSession: BoardSession, @unchecked Sendable {
 
     /// Whether the link is up, asked afresh every time. A closure rather than a set of indices
     /// because the cases that matter are stated as conditions, not positions: T07 is offline for
-    /// most of twelve hours, and a board that comes back exactly at the deadline is the reason
-    /// `waitDone` reads once more before concluding.
+    /// most of its run and T08 for much of its own, which is exactly why being unreachable is
+    /// never treated as evidence of anything.
     var online: () -> Bool = { true }
 
     /// Runs before each command, given the number of commands already answered. This is where a

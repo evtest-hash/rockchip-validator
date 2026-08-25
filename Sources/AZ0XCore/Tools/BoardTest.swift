@@ -73,7 +73,7 @@ struct BoardTest {
     /// a completion word quoted inside an abort reason, or a future incident line that happens to
     /// contain a marker as a substring, can no longer end the run. Scanning backwards means a
     /// trailing blank or a stray line cannot hide the terminal either. Silence is never an ending —
-    /// that is what the deadline is for.
+    /// a payload always says so in writing.
     static func classifyTerminal(_ progressLog: String, doneMarker: String) -> Terminal? {
         for line in progressLog.components(separatedBy: .newlines).reversed() {
             // The epoch, then the message; a malformed line without the epoch still classifies.
@@ -89,15 +89,62 @@ struct BoardTest {
         return nil
     }
 
-    /// Wall-clock budget for one long-run item: what it declared, plus settling, plus slack.
+    // MARK: - How long the host waits
+
+    /// How the host decides it has waited long enough.
     ///
-    /// Reaching this is not a statement about the board — it says only that no result arrived, so
-    /// it maps to 未得结果. It cannot false-fail a working board: the payload self-terminates at
-    /// its declared duration, so a live board has written a terminal marker long before.
+    /// Never a verdict either way: an item that produced no terminal marker is 未得结果, and the
+    /// board is never stopped by anything here — the payloads run to their own end whatever the
+    /// host does.
+    enum Patience {
+        /// The payload stops itself at a declared duration, so the host can name a wall clock:
+        /// that duration, plus settling and slack. T06 is the only item that works this way, and
+        /// only because a duration is what it was told to run for.
+        case untilDeclaredDuration(TimeInterval)
+
+        /// Bounded by a count. The host waits while the board says the test is still set up to run,
+        /// and stops only when the board says it is not.
+        ///
+        /// The question is whether the test is still running — never whether it is running fast
+        /// enough. Any wall clock, and equally any judgement made from how quickly the board has
+        /// been cycling so far, is an opinion about how long one cycle takes; a board whose cycles
+        /// are simply slower, or merely uneven, then gets abandoned part-way through a run it would
+        /// have finished, and a healthy material is recorded as having produced no result.
+        ///
+        /// The closure answers `true` still set up to run, `false` definitely not, and nil when the
+        /// board cannot be asked at all — which is most of the time, because suspending and
+        /// rebooting is precisely what these items do.
+        case whileTestIsRunning(() async -> Bool?)
+    }
+
+    /// Wall clock for a duration-bounded item: what it declared, plus settling, plus slack.
+    ///
+    /// Reaching it is not a statement about the board — it says only that no result arrived. It
+    /// cannot false-fail a working board: such a payload self-terminates at its declared duration,
+    /// so a live board has written a terminal marker long before.
     static func budget(wallClock: Int, phases: Int = 1) -> TimeInterval {
         Double(wallClock * max(1, phases))
             + Thresholds.settleSeconds
             + Thresholds.longRunMarginSeconds
+    }
+
+    // MARK: - Is the test still running
+
+    /// Whether the board still holds the process that was started for this item.
+    ///
+    /// The payload records its own pid; a pid that no longer has a `/proc` entry means the script is
+    /// gone — killed, crashed, or ended without writing a terminal marker. That is a fact about the
+    /// test, available at once, and it replaces waiting out a clock to discover the same thing.
+    func payloadAlive() async -> Bool? {
+        let pid = await read("pid").trimmingCharacters(in: .whitespacesAndNewlines)
+        // No pid yet is not evidence of anything: the script may not have written it.
+        guard !pid.isEmpty, pid.allSatisfy(\.isNumber) else { return nil }
+        return await adb.line("[ -d /proc/\(pid) ] && echo yes").contains("yes")
+    }
+
+    /// Whether T08's reboot service is still installed and has not disarmed itself.
+    func rebootServiceArmed(initd: String) async -> Bool? {
+        await adb.line("[ -x \(initd) ] && [ ! -f \(directory)/stop ] && echo yes").contains("yes")
     }
 
     // MARK: - Polling
@@ -109,45 +156,83 @@ struct BoardTest {
         case done
         /// The payload said it could not continue, and why. Never a verdict on the material.
         case aborted(String)
-        /// The budget expired with no terminal marker. Says only that no result arrived.
-        case timedOut(String)
+        /// The host stopped waiting with no terminal marker in hand, and why. Says only that no
+        /// result arrived — never anything about the material.
+        case stopped(String)
         /// The operator left.
         case cancelled
     }
 
-    /// Waits for the board to say it is finished, or for the budget to expire.
+    /// Waits for the board to say it is finished.
     ///
-    /// The host never judges whether the board is alive. It waits for one of the three terminal
-    /// markers, and if the declared budget passes without one it reports that no result arrived.
-    /// A long silence is not evidence of anything: T07 suspends for most of its run and T08 is
-    /// rebooting, so both look identical to a dead board from here.
+    /// The host never judges whether the board is healthy, and never judges how fast it ought to be
+    /// going. It waits for one of the three terminal markers, and for a count-bounded item it stops
+    /// on one of two facts the board itself supplies: the test is no longer set up to run, or the
+    /// board has been off the bus longer than a board in this test may be.
     ///
-    /// - Parameter deadline: total wall clock allowed, or nil for an item bounded by something
-    ///   other than time (E05 is bounded by bytes written, so a time cap would be arbitrary).
+    /// What is timed is being **absent**, never being slow. Any contact at all resets it, so a board
+    /// that takes as long as it likes between cycles is followed to its end for as long as it keeps
+    /// coming back. Only a board that has gone and stayed gone runs the clock out.
+    ///
+    /// - Parameter onOffline: called each poll the board cannot be reached, with how long it has
+    ///   been absent. Without it the console goes silent exactly when the operator most needs to
+    ///   know whether the board is rebooting or dead.
     func waitDone(doneMarker: String,
                   pollSeconds: Int = 15,
-                  deadline: TimeInterval? = nil,
-                  onTick: ((String) -> Void)? = nil) async -> WaitOutcome {
-        // Monotonic, so the host sleeping does not consume the board's budget.
+                  patience: Patience,
+                  onTick: ((String) -> Void)? = nil,
+                  onOffline: ((TimeInterval) -> Void)? = nil) async -> WaitOutcome {
+        // Monotonic, so the host sleeping does not consume a duration-bounded item's time.
         let began = clock.now
+        var lastSeen = ""
+        var awaySince: TimeInterval?
+
         while !Task.isCancelled {
+            var giveUp: String?
+
             if await adb.isOnline {
+                awaySince = nil
                 let log = await read("progress.log")
                 onTick?(log)
                 if let terminal = Self.classifyTerminal(log, doneMarker: doneMarker) {
                     return Self.outcome(of: terminal)
                 }
+                // A new record is the board counting, and counting is proof it is running. Nothing
+                // more is asked while that keeps happening.
+                //
+                // What it cannot prove is the opposite. A count that has not moved may be a board
+                // mid-cycle or a board that has stopped, and the only thing separating them is how
+                // long one cycle is supposed to take — the assumption this design exists to avoid.
+                // So a still count decides nothing, and the board is asked outright instead.
+                let counting = log != lastSeen
+                lastSeen = log
+                if !counting, case let .whileTestIsRunning(stillRunning) = patience,
+                   await stillRunning() == false {
+                    giveUp = "板端测试已不在运行，且没有写出结论"
+                }
+            } else if case .whileTestIsRunning = patience {
+                let away = awaySince ?? clock.now
+                awaySince = away
+                onOffline?(clock.now - away)
+                if clock.elapsed(since: away, exceeds: Double(Thresholds.maxOfflineSeconds)) {
+                    giveUp = "板子已离线 \(Self.spell(Double(Thresholds.maxOfflineSeconds)))未返回"
+                }
             }
-            if let deadline, clock.elapsed(since: began, exceeds: deadline) {
-                // Read once more before concluding: the board may have come back moments ago, and
-                // an answer that exists must not be thrown away over timing.
+            if case let .untilDeclaredDuration(limit) = patience,
+               clock.elapsed(since: began, exceeds: limit) {
+                giveUp = "等待 \(Self.spell(limit)) 后板端仍未给出结论"
+            }
+
+            if let giveUp {
+                // Read once more before concluding. This is not politeness about timing: T08 writes
+                // its `stop` file just before its terminal marker, so a poll landing between the two
+                // sees a disarmed test on a run that in fact finished. An answer that exists must
+                // never be discarded.
                 let last = await adb.isOnline ? await read("progress.log") : ""
                 if let terminal = Self.classifyTerminal(last, doneMarker: doneMarker) {
                     return Self.outcome(of: terminal)
                 }
-                return .timedOut(last.isEmpty
-                    ? "等待 \(Self.hours(deadline)) 后仍读不到板端结果"
-                    : "等待 \(Self.hours(deadline)) 后板端仍未给出结论")
+                return .stopped(last.isEmpty ? giveUp + "，也读不到板端进度" : giveUp)
             }
             await clock.sleep(seconds: Double(pollSeconds))
         }
@@ -161,9 +246,12 @@ struct BoardTest {
         }
     }
 
-    /// Hours and minutes, for a message an operator reads.
-    private static func hours(_ seconds: TimeInterval) -> String {
+    /// A span an operator reads. Now that the host follows the board's pace, these run from seconds
+    /// to days, so the unit is chosen rather than fixed at hours.
+    static func spell(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
+        if total < 60 { return "\(total) 秒" }
+        if total < 3600 { return "\(total / 60) 分钟" }
         let h = total / 3600, m = (total % 3600) / 60
         return m > 0 ? "\(h) 小时 \(m) 分" : "\(h) 小时"
     }

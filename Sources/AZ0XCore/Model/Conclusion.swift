@@ -25,7 +25,7 @@ enum Execution: Equatable, Codable {
     /// Ran, but the run was not valid: the evidence cannot be read, the work was not actually done,
     /// or our own tooling misbehaved. pytest's setup-phase error; OpenHTF's PhaseOutcome.ERROR.
     ///
-    /// Kept apart from `interrupted` because for a twelve-hour item the difference is twelve hours:
+    /// Kept apart from `interrupted` because for a long item the difference is the whole run:
     /// here the board may well have done the work and only our reading of it failed, so what needs
     /// retrying is the reading.
     case invalid(String)
