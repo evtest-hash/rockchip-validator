@@ -198,13 +198,15 @@ enum AZ0X {
         if items.contains(where: { TestItem.flashCodes.contains($0.code) }) {
             var lastPct = -1
             do {
-                plan.image = try await ImageSupply.prepare(model: model) { done, total in
-                    guard let total, total > 0 else { return }
-                    let pct = Int(Double(done) / Double(total) * 100)
-                    guard pct != lastPct else { return }
-                    lastPct = pct
-                    print("取镜像 \(pct)%")
-                }
+                plan.image = try await ImageSupply.prepare(
+                    model: model,
+                    onProgress: { done, total in
+                        guard let total, total > 0 else { return }
+                        let pct = Int(Double(done) / Double(total) * 100)
+                        guard pct != lastPct else { return }
+                        lastPct = pct
+                        print("取镜像 \(pct)%")
+                    })
             } catch {
                 // Nothing is ready to flash, so no board is opened.
                 return fail("取镜像失败：\(error.localizedDescription)")

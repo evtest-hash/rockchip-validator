@@ -40,7 +40,7 @@ enum DownloadError: LocalizedError {
     case httpStatus(Int, String)
     var errorDescription: String? {
         switch self {
-        case let .httpStatus(c, u): return "下载失败：HTTP \(c)（\(u)）"
+        case let .httpStatus(c, _): return "镜像下载中断（HTTP \(c)）"
         }
     }
 }

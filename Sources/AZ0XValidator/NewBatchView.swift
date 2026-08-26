@@ -107,11 +107,11 @@ struct NewBatchView: View {
     @ViewBuilder
     private var fetchingPanel: some View {
         VStack(spacing: 13) {
-            Text("取镜像").font(.system(size: 15, weight: .medium))
+            Text("正在准备镜像").font(.system(size: 15, weight: .medium))
             switch app.imageFetch {
             case .asking:
                 ProgressView().controlSize(.small)
-                Text("正在查询 CI 最新构建").font(.callout).foregroundStyle(.secondary)
+                Text("正在获取镜像信息…").font(.callout).foregroundStyle(.secondary)
             case let .fetching(asset, done, total):
                 if let total, total > 0 {
                     ProgressView(value: Double(done), total: Double(total)).frame(width: 320)
@@ -129,7 +129,8 @@ struct NewBatchView: View {
             case nil:
                 EmptyView()
             }
-            Text("镜像取到之后本批次才开始，取不到则一块板都不会被动到。")
+            // What happens next, not why it works this way.
+            Text("镜像就绪后自动开始验证")
                 .font(.caption).foregroundStyle(.tertiary).padding(.top, 4)
         }
     }
@@ -184,7 +185,7 @@ struct NewBatchView: View {
     }
 
     private var startTitle: String {
-        if app.imageFetch != nil { return "取镜像…" }
+        if app.imageFetch != nil { return "正在准备镜像…" }
         let n = app.confirmed.count
         return n > 1 ? "开始验证 \(n) 块" : "开始验证"
     }

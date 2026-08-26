@@ -204,7 +204,7 @@ final class AppState: ObservableObject {
                 } catch {
                     await MainActor.run {
                         self?.imageFetch = nil
-                        self?.fetchError = "取镜像失败：\(error.localizedDescription)。本批次未开始。"
+                        self?.fetchError = "\(error.localizedDescription)。验证未开始。"
                     }
                     return
                 }

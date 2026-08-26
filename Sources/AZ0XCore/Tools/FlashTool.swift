@@ -321,15 +321,14 @@ enum FlashError: LocalizedError {
     case unsafeIndexEntry(String, String)
     var errorDescription: String? {
         switch self {
-        case let .badImageURL(u): return "镜像地址无效：\(u)"
-        case let .noImage(m):     return "CI 快照通道没有 \(m) 的镜像"
-        case let .httpStatus(c, u):
-            return "镜像地址返回 HTTP \(c)（\(u)）—— 地址可能已失效"
-        case let .digestMismatch(a):
-            return "镜像 sha256 与 CI 记录不符（\(a)），已丢弃该文件，请重试"
-        case let .unsafeIndexEntry(field, value):
-            return "CI 索引里的\(field)不能用作文件名（\(value)）—— 已拒绝下载，"
-                 + "请核对快照通道是否被改动"
+        case .badImageURL:        return "镜像地址无效，无法下载"
+        case let .noImage(m):     return "未找到 \(m) 的镜像"
+        case let .httpStatus(c, _):
+            return "镜像服务器无法提供该镜像（HTTP \(c)）"
+        case .digestMismatch:
+            return "镜像校验失败，文件已丢弃，请重试"
+        case .unsafeIndexEntry:
+            return "镜像索引数据有误，已拒绝下载"
         }
     }
 }

@@ -36,8 +36,8 @@ public enum ImageSupply {
 
         public var errorDescription: String? {
             switch self {
-            case .toolMissing:      return "刷机工具未随应用打包（rockchip-flash-tool-cli 缺失）"
-            case let .noImage(m):   return "CI 快照通道没有 \(m.rawValue) 的镜像"
+            case .toolMissing:      return "应用安装不完整，缺少刷机组件，请重新安装"
+            case let .noImage(m):   return "未找到 \(m.rawValue) 的镜像"
             case let .channel(why): return why
             }
         }
@@ -64,12 +64,33 @@ public enum ImageSupply {
                         onProgress: ByteProgress? = nil) async throws -> PreparedImage {
         let meta: FlashTool.ImageMeta?
         do { meta = try await tool.latestImage(for: model) }
-        catch { throw Failure.channel("无法访问 CI 快照通道：\(error.localizedDescription)") }
+        catch { throw stated(error) }
         guard let meta else { throw Failure.noImage(model) }
         onAsset?(meta.asset)
 
-        let fetched = try await tool.fetch(meta, onProgress: onProgress)
+        let fetched: FlashTool.FetchedImage
+        do { fetched = try await tool.fetch(meta, onProgress: onProgress) }
+        catch { throw stated(error) }
         return PreparedImage(url: fetched.url, asset: meta.asset,
                              digestVerified: fetched.digestVerified)
+    }
+
+    /// Whatever went wrong, said in the operator's words.
+    ///
+    /// Nothing that reaches the screen here may be a system error describing itself: `URLError`
+    /// speaks English, and "The Internet connection appears to be offline." in front of someone
+    /// validating a board is noise. The technical detail that is worth keeping is a code — an HTTP
+    /// status fits in the sentence; a URL or a sha256 does not, and neither is anything the person
+    /// reading it can act on.
+    private static func stated(_ error: Error) -> Failure {
+        if let ours = error as? Failure { return ours }
+        if let flash = error as? FlashError, let why = flash.errorDescription {
+            return .channel(why)
+        }
+        if let download = error as? DownloadError, let why = download.errorDescription {
+            return .channel(why)
+        }
+        if error is URLError { return .channel("无法连接镜像服务器，请检查网络") }
+        return .channel("获取镜像时出错")
     }
 }
