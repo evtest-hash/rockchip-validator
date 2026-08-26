@@ -47,19 +47,26 @@ public enum ImageSupply {
     ///
     /// Throws rather than returning an optional: every way this fails means the batch is not ready
     /// to start, and none of them says anything about any board.
+    /// `onAsset` fires once CI has named the build, which is before a single byte moves. The two
+    /// halves of this step look different to whoever is waiting: asking CI has no byte count to
+    /// show, and the transfer has nothing to name until the asking is done.
     public static func prepare(model: DeviceModel,
+                               onAsset: ((String) -> Void)? = nil,
                                onProgress: ByteProgress? = nil) async throws -> PreparedImage {
         guard let tool = FlashTool() else { throw Failure.toolMissing }
-        return try await prepare(model: model, using: tool, onProgress: onProgress)
+        return try await prepare(model: model, using: tool,
+                                 onAsset: onAsset, onProgress: onProgress)
     }
 
     /// The injectable form, so the whole path is reachable without a network.
     static func prepare(model: DeviceModel, using tool: any Flasher,
+                        onAsset: ((String) -> Void)? = nil,
                         onProgress: ByteProgress? = nil) async throws -> PreparedImage {
         let meta: FlashTool.ImageMeta?
         do { meta = try await tool.latestImage(for: model) }
         catch { throw Failure.channel("无法访问 CI 快照通道：\(error.localizedDescription)") }
         guard let meta else { throw Failure.noImage(model) }
+        onAsset?(meta.asset)
 
         let fetched = try await tool.fetch(meta, onProgress: onProgress)
         return PreparedImage(url: fetched.url, asset: meta.asset,

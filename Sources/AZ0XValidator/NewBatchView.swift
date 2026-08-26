@@ -12,7 +12,15 @@ struct NewBatchView: View {
         VStack(spacing: 0) {
             stepHeader
             Divider()
-            ScrollView { page.padding(.vertical, 22) }
+            if let fetchError = app.fetchError { errorBanner(fetchError) }
+            // The wait replaces the page rather than sitting beside it. What the operator can
+            // usefully do while an image is coming down is nothing, and leaving the selection
+            // on screen live invites a second click that starts a second batch.
+            if app.imageFetch != nil {
+                fetchingPanel.frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView { page.padding(.vertical, 22) }
+            }
             Divider()
             footer
         }
@@ -93,6 +101,58 @@ struct NewBatchView: View {
 
     // MARK: - Footer
 
+    /// What the step before the batch is doing. It has two halves and they look different: asking
+    /// CI which build is current has no byte count to show, and the transfer has nothing to name
+    /// until the asking is done.
+    @ViewBuilder
+    private var fetchingPanel: some View {
+        VStack(spacing: 13) {
+            Text("取镜像").font(.system(size: 15, weight: .medium))
+            switch app.imageFetch {
+            case .asking:
+                ProgressView().controlSize(.small)
+                Text("正在查询 CI 最新构建").font(.callout).foregroundStyle(.secondary)
+            case let .fetching(asset, done, total):
+                if let total, total > 0 {
+                    ProgressView(value: Double(done), total: Double(total)).frame(width: 320)
+                    Text("\(bytes(done)) / \(bytes(total))")
+                        .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+                } else {
+                    // No content-length: a determinate bar would need a denominator we do not have.
+                    ProgressView().controlSize(.small)
+                    Text(bytes(done)).font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                if !asset.isEmpty {
+                    Text(asset).font(.caption).foregroundStyle(.tertiary)
+                }
+            case nil:
+                EmptyView()
+            }
+            Text("镜像取到之后本批次才开始，取不到则一块板都不会被动到。")
+                .font(.caption).foregroundStyle(.tertiary).padding(.top, 4)
+        }
+    }
+
+    private func bytes(_ n: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: n, countStyle: .file)
+    }
+
+    /// Stays until the next attempt. The batch did not start, so the selection behind it is still
+    /// the operator's to correct and press again.
+    private func errorBanner(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(text).fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+        .font(.callout)
+        .foregroundStyle(.red)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .background(Color.red.opacity(0.08))
+    }
+
     private var footer: some View {
         HStack(spacing: 12) {
             Spacer()
@@ -107,13 +167,16 @@ struct NewBatchView: View {
                 .disabled(app.confirmed.isEmpty)
             } else {
                 Button("上一步") { step = 1 }
+                    .disabled(app.imageFetch != nil)
                 Button {
                     app.startBatch()
                 } label: {
                     Text(startTitle).frame(minWidth: 120)
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(app.resolvedItems.isEmpty || app.confirmed.isEmpty)
+                // A second press would start a second download and a second batch.
+                .disabled(app.resolvedItems.isEmpty || app.confirmed.isEmpty
+                          || app.imageFetch != nil)
             }
         }
         .padding(.horizontal, 20)
@@ -121,6 +184,7 @@ struct NewBatchView: View {
     }
 
     private var startTitle: String {
+        if app.imageFetch != nil { return "取镜像…" }
         let n = app.confirmed.count
         return n > 1 ? "开始验证 \(n) 块" : "开始验证"
     }

@@ -42,8 +42,19 @@ final class AppState: ObservableObject {
     /// Bundled tools this build is missing. Nothing can run without them.
     let missingTools = MaskromScan.missingTools
 
-    /// Progress of the one fetch that precedes a batch, and why it failed if it did.
-    @Published var fetching: (done: Int64, total: Int64?)?
+    /// What the one step that precedes a batch is doing, so the screen can say so.
+    ///
+    /// It used to be a published tuple that no view read: the operator pressed 开始验证 and the
+    /// wizard sat there unchanged for as long as a 766 MB transfer takes, with the button still
+    /// live, and a failure set a message nothing displayed. Written, never shown — which no
+    /// compiler and no test could see.
+    enum ImageFetch: Equatable {
+        /// Asking CI which build is current. No byte count exists yet.
+        case asking
+        /// Transferring. `total` is nil when the server did not say how large it is.
+        case fetching(asset: String, done: Int64, total: Int64?)
+    }
+    @Published var imageFetch: ImageFetch?
     @Published var fetchError: String?
 
     // MARK: - Past batches
@@ -169,16 +180,30 @@ final class AppState: ObservableObject {
         let asked = scale
 
         fetchError = nil
+        // Set before the task starts, so the screen changes on the click rather than whenever the
+        // first callback happens to arrive.
+        imageFetch = flashes ? .asking : nil
         Task { [weak self] in
             var image: PreparedImage?
             if flashes {
+                var named = ""
                 do {
-                    image = try await ImageSupply.prepare(model: chosen) { done, total in
-                        Task { @MainActor [weak self] in self?.fetching = (done, total) }
-                    }
+                    image = try await ImageSupply.prepare(
+                        model: chosen,
+                        onAsset: { asset in
+                            named = asset
+                            Task { @MainActor [weak self] in
+                                self?.imageFetch = .fetching(asset: asset, done: 0, total: nil)
+                            }
+                        },
+                        onProgress: { done, total in
+                            Task { @MainActor [weak self] in
+                                self?.imageFetch = .fetching(asset: named, done: done, total: total)
+                            }
+                        })
                 } catch {
                     await MainActor.run {
-                        self?.fetching = nil
+                        self?.imageFetch = nil
                         self?.fetchError = "取镜像失败：\(error.localizedDescription)。本批次未开始。"
                     }
                     return
@@ -186,7 +211,7 @@ final class AppState: ObservableObject {
             }
             await MainActor.run {
                 guard let self else { return }
-                self.fetching = nil
+                self.imageFetch = nil
                 let batch = Batch(batchID: batchID, model: chosen, flow: chosenFlow, items: items,
                                   burninPhases: phases, deviceIDs: boards, folder: folder,
                                   scale: asked, image: image)

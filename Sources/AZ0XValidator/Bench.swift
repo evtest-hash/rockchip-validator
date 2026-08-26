@@ -27,8 +27,6 @@ final class Bench: ObservableObject, Identifiable {
 
     /// Read from OTP during the first maskrom item; nil until then.
     @Published var serial: String?
-    /// What the board says about itself once it has booted.
-    @Published var identity: String?
 
     @Published var results: [String: ItemResult] = [:]
     /// Code of the running item; nil means nothing is.
@@ -136,9 +134,10 @@ final class Bench: ObservableObject, Identifiable {
         switch event {
         case .waitingForBoard:
             startedAt = startedAt ?? Date()
-        case let .boardBound(serial, identity):
+        case let .boardBound(serial, _):
             self.serial = serial
-            self.identity = identity
+            // The identity the board reports over adb is not kept here: nothing on screen shows it,
+            // and the report takes it from the engine's own record. `az0x` prints it from the event.
             maskromSeen = true
         case let .itemStarted(item):
             runningCode = item.code
