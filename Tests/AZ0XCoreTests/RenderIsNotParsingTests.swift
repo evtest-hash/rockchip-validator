@@ -34,7 +34,7 @@ final class RenderIsNotParsingTests: XCTestCase {
                    burninPhases: BurninPhase.allCases, scale: .default, items: TestItem.ddrItems, results: results,
                    startedAt: Date(timeIntervalSince1970: 1_787_000_000),
                    finishedAt: Date(timeIntervalSince1970: 1_787_130_000),
-                   stoppedAt: nil, toolVersions: [], appVersion: "2.0")
+                   stoppedAt: nil, toolVersions: [], appVersion: "1.0.0-3-gabc1234")
     }
 
     /// Replace every log body with something that contradicts the record. Nothing above the

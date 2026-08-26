@@ -26,7 +26,7 @@ final class ReportTests: XCTestCase {
                    startedAt: Date(timeIntervalSince1970: 1_787_000_000),
                    finishedAt: Date(timeIntervalSince1970: 1_787_130_000),
                    stoppedAt: stoppedAt,
-                   toolVersions: [], appVersion: "2.0")
+                   toolVersions: [], appVersion: "1.0.0-3-gabc1234")
     }
 
     /// Every item passing, with the record-only ones recorded.

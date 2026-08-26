@@ -70,7 +70,7 @@ final class WholeFlowReportTests: XCTestCase {
             startedAt: Date(timeIntervalSince1970: 1_787_000_000),
             finishedAt: Date(timeIntervalSince1970: 1_787_130_000),
             stoppedAt: stoppedAt,
-            toolVersions: ["RockchipDDRTestUtilityCLI 1.4.2"], appVersion: "2.0")
+            toolVersions: ["RockchipDDRTestUtilityCLI 1.4.2"], appVersion: "1.0.0-3-gabc1234")
     }
 
     private func dump(_ name: String, _ md: String) {

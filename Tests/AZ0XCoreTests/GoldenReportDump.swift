@@ -38,7 +38,7 @@ final class GoldenReportDump: XCTestCase {
                       startedAt: Date(timeIntervalSince1970: 1_787_000_000),
                       finishedAt: Date(timeIntervalSince1970: 1_787_130_000),
                       stoppedAt: nil,
-                      toolVersions: ["RockchipDDRTestUtilityCLI 1.4.2"], appVersion: "2.0")
+                      toolVersions: ["RockchipDDRTestUtilityCLI 1.4.2"], appVersion: "1.0.0-3-gabc1234")
 
         let e = JSONEncoder(); e.dateEncodingStrategy = .iso8601; e.outputFormatting = .prettyPrinted
         try e.encode(run).write(to: URL(fileURLWithPath: dest))

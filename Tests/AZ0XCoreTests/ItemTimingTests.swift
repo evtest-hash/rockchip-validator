@@ -32,7 +32,7 @@ final class ItemTimingTests: XCTestCase {
                    burninPhases: BurninPhase.allCases, scale: .default,
                    items: TestItem.ddrItems, results: results,
                    startedAt: t0, finishedAt: nil, stoppedAt: nil,
-                   toolVersions: [], appVersion: "2.0")
+                   toolVersions: [], appVersion: "1.0.0-3-gabc1234")
     }
 
     private func row(_ md: String, _ code: String) -> String {

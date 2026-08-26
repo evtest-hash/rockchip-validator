@@ -20,7 +20,7 @@ final class AppendixTests: XCTestCase {
                    burninPhases: BurninPhase.allCases, scale: .default,
                    items: items, results: [code: r],
                    startedAt: nil, finishedAt: nil, stoppedAt: nil,
-                   toolVersions: [], appVersion: "2.0")
+                   toolVersions: [], appVersion: "1.0.0-3-gabc1234")
     }
 
     private var longLog: String {

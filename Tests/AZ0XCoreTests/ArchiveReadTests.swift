@@ -33,7 +33,7 @@ final class ArchiveReadTests: XCTestCase {
                    burninPhases: BurninPhase.allCases, scale: .default,
                    items: TestItem.ddrItems, results: results,
                    startedAt: Date(timeIntervalSince1970: 1_787_000_000), finishedAt: nil,
-                   stoppedAt: stoppedAt, toolVersions: [], appVersion: "2.0")
+                   stoppedAt: stoppedAt, toolVersions: [], appVersion: "1.0.0-3-gabc1234")
     }
 
     /// Writes one board folder the way a real run does, and returns it.
