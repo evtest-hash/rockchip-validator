@@ -104,6 +104,11 @@ struct MaskromItems {
         // No check of our own. T01 makes no claim about the material — it records what the part is
         // — and whether the tool could pin it to one cfg is already in `errorCode` (`ambiguousCfg`,
         // `cfgNotFound`), which the envelope has settled before we get here.
+        //
+        // And no evidence either, deliberately: T02 keeps the device's solder log and T03 the eye
+        // scan transcript, so the absence here reads like an oversight. It is not. What `--detect`
+        // has to say is already above, as structured readings the report can put in a table; its
+        // prose would add a second, looser copy of the same facts for a reader to reconcile.
         r.conclude()
         return r
     }
