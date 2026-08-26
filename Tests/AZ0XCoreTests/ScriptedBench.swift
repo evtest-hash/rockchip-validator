@@ -59,15 +59,31 @@ enum ScriptedBench {
             ("oom_kill", "0"),
             ("MemAvailable", "8000"),
             ("stress-ng", t05Missing ? "sh: stress-ng: not found" : ""),
+            // The shape a real AZ08 prints: the master table *and* the LOAD / RD / WR rows.
+            // The fixture used to carry only the table, which is the fallback the parser keeps for
+            // versions that print no LOAD line — so the shape that actually ran on hardware was
+            // never exercised, and 峰值利用率 (which only the LOAD line carries) looked optional.
             ("rk-msch-probe", """
                 ========================================loop 1/8====================================
-                ddr freq: 2112Mhz CH0:
-                probes statistics:
-                                        master  bw(MB/s)  bw prorated(%)  utilization(%)
-                                          core  12164.00          98.00%          61.20%
-                                         total  12164.00         100.00%          61.20%
-
-                     ddr load: 12164.00MB/s(61.20%) [RD:8000.00MB/s(40.00%), WR:4164.00MB/s(21.20%)
+                ddr freq: 2112Mhz      cpu   others    total
+                master bw(MB/s)   11800.00     0.00 11800.00
+                bw prorated(%)       98.00     0.00   100.00
+                utilization(%)       59.40     0.00    59.40
+                ---------------------ALL--------------CH0--------
+                       recorded LOAD: max 11800.00MB/s(59.40%), avg 10400.00MB/s(52.20%)
+                                LOAD:  11800.00MB/s(59.40%),  5900.00MB/s(59.40%)
+                                  RD:   3000.00MB/s(15.10%),  1500.00MB/s(15.10%)
+                                  WR:   8800.00MB/s(44.30%),  4400.00MB/s(44.30%)
+                ========================================loop 2/8====================================
+                ddr freq: 2112Mhz      cpu   others    total
+                master bw(MB/s)   12164.00     0.00 12164.00
+                bw prorated(%)       98.00     0.00   100.00
+                utilization(%)       61.20     0.00    61.20
+                ---------------------ALL--------------CH0--------
+                       recorded LOAD: max 12164.00MB/s(61.20%), avg 10400.00MB/s(52.20%)
+                                LOAD:  12164.00MB/s(61.20%),  6082.00MB/s(61.20%)
+                                  RD:   3164.00MB/s(15.90%),  1582.00MB/s(15.90%)
+                                  WR:   9000.00MB/s(45.30%),  4500.00MB/s(45.30%)
                 """),
             // T06
             ("grep -ic FAILURE", "0"),

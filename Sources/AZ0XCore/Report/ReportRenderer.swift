@@ -307,7 +307,9 @@ public struct ReportRenderer {
         "T03": ["工具耗时", "扫描跑完"],
         // T04 and E01 carry only the image name and the flashing duration, as required.
         "T04": ["镜像", "镜像校验", "刷写耗时"],
-        "T05": ["峰值带宽", "DDR 频率"],
+        // 13570 MB/s on its own says nothing — 理论带宽 is what makes it a proportion, and this
+        // item has no criterion, so the reader is the one who has to do that division.
+        "T05": ["峰值带宽", "理论带宽", "峰值利用率", "DDR 频率"],
         "T06": ["完成段数", "拷机平均带宽", "成功切频次数", "memtester 循环数（变频段）"],
         "T07": ["完成周期", "内核记录挂起次数"],
         "T08": ["重启次数", "最长起回间隔"],
@@ -342,7 +344,12 @@ public struct ReportRenderer {
                 switch e.kind {
                 case .log:
                     out.append("```text")
-                    out.append(abridged(e.body.trimmingCharacters(in: .newlines)))
+                    // A maskrom item's evidence is one tool invocation's transcript: bounded by the
+                    // tool, the same length whatever the run asks for, and the whole of what the
+                    // device said. Shortening it hid 1082 lines of an eye scan behind a summary
+                    // line. Board-side evidence grows with the run and is shortened for reading.
+                    let body = e.body.trimmingCharacters(in: .newlines)
+                    out.append(item.domain == .maskrom ? body : abridged(body))
                     out.append("```")
                 case .markdown:
                     out.append(e.body.trimmingCharacters(in: .newlines))

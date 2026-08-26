@@ -223,7 +223,11 @@ extension BoardItems {
             .markdown("异常清单", LongTest.anomalyList(progress, markers: ["SUSPENDFAIL", "rc=[1-9]"])),
             .log("首尾周期样本", LongTest.headTail(progress, 3)),
             .log("内核 suspend_stats", stats),
-            .log("板端 progress.log", progress),
+            // No progress.log here. It is one line per cycle, so at the acceptance amount it is
+            // three thousand lines of `cycle N rc=0 fail=0` — and the appendix already carries both
+            // of its ends, three lines each, in a readable form. The record keeps every line in
+            // run.json, and the file itself is archived under logs/. The failure paths below still
+            // attach it whole: that is where nothing else says what happened.
         ]
         return r
     }
@@ -339,7 +343,7 @@ extension BoardItems {
                                              target: targetBoots)),
             .markdown("起回间隔分段统计", Self.gapSegments(gaps)),
             .markdown("异常清单", LongTest.anomalyList(progress, markers: ["PANIC"])),
-            .log("板端 progress.log", progress),
+            // As T07: one line per boot, and the two tables above already say what it holds.
         ]
         // pstore is attached only when a panic was detected.
         if progress.contains("PANIC") {

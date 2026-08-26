@@ -18,10 +18,12 @@ final class RenderIsNotParsingTests: XCTestCase {
             var r = ItemResult(code: item.code)
             r.measurements = [.num("实际历时", 43_200, "s"), .num("完成周期", 3_000)]
             if !item.isRecordOnly { r.criteria = [.equals("memtester FAILURE", 0, 0)] }
-            r.evidence = [
-                .log("板端 progress.log", bodies),
-                .markdown("各段总览", "| 项 | 值 |\n|---|---|\n| 完成段数 | 3 |"),
-            ]
+            // A board-side progress.log on a maskrom item is not a shape that occurs: those items
+            // run before the board boots. It mattered once the appendix started treating the two
+            // domains differently — the long log was reaching T01's appendix, where it is shown
+            // whole, and the assertion about shortening passed on the wrong item.
+            r.evidence = [.markdown("各段总览", "| 项 | 值 |\n|---|---|\n| 完成段数 | 3 |")]
+            if item.domain == .board { r.evidence.insert(.log("板端 progress.log", bodies), at: 0) }
             r.conclude()
             results[item.code] = r
         }

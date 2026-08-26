@@ -122,7 +122,10 @@ struct MaskromItems {
         // which is T01's job; T02's job is the solder verdict.
         let log = sol.str("log") ?? ""
         if let cfg = sol.str("cfg"), !cfg.isEmpty { r.measurements.append(.text("检测 cfg", cfg)) }
-        if !log.isEmpty { r.evidence = [.log("焊接检测设备输出", log)] }
+        // Normalised at extraction, as every other transcript is: the device speaks CRLF over
+        // serial, and a stray CR on every line is invisible in a rendered code block but sits in
+        // the file. Measured on a real AZ08: not one line of content changes.
+        if !log.isEmpty { r.evidence = [.log("焊接检测设备输出", LongTest.normalize(log))] }
 
         // Only `pass` and `errorCode`. An earlier revision gated on `solder.bootSucceeded`, having
         // guessed what it meant — and a real AZ08 came back `pass: true, errorCode: nil, exit 0`
@@ -155,7 +158,7 @@ struct MaskromItems {
         }
         r.measurements.append(.text("扫描判定", (eye.bool("pass") ?? false) ? "pass" : "fail"))
         if let transcript = eye.str("transcript"), !transcript.isEmpty {
-            r.evidence = [.log("DQ 眼图扫描 transcript", transcript)]
+            r.evidence = [.log("DQ 眼图扫描 transcript", LongTest.normalize(transcript))]
         }
 
         // `completed` and `wedged` are recorded, not gated: the tool already routes both through
