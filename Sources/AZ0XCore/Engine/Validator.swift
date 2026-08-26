@@ -18,6 +18,8 @@ public struct RunPlan {
     public var burninSeconds: Int = Thresholds.longRunSeconds
     public var cycles: Int = Thresholds.longRunCycles
     public var emmcTargetN: Int = Thresholds.emmcTargetN
+    /// The image to flash, when the sequence flashes. Fetched once, before any board is opened.
+    public var image: PreparedImage?
 
     public init(batchID: String, runID: String = UUID().uuidString,
                 model: DeviceModel, flow: ValidationFlow,
@@ -25,7 +27,8 @@ public struct RunPlan {
                 deviceID: String, boardSerial: String? = nil,
                 burninSeconds: Int = Thresholds.longRunSeconds,
                 cycles: Int = Thresholds.longRunCycles,
-                emmcTargetN: Int = Thresholds.emmcTargetN) {
+                emmcTargetN: Int = Thresholds.emmcTargetN,
+                image: PreparedImage? = nil) {
         self.batchID = batchID
         self.runID = runID
         self.model = model
@@ -37,6 +40,7 @@ public struct RunPlan {
         self.burninSeconds = burninSeconds
         self.cycles = cycles
         self.emmcTargetN = emmcTargetN
+        self.image = image
     }
 }
 
@@ -286,11 +290,9 @@ public struct Validator {
         case "T02": return await maskrom.runT02()
         case "T03": return await maskrom.runT03()
         case "T04", "E01":
-            var flashed = await maskrom.runFlash(code: item.code, flashTool: flashTool) { stage in
+            var flashed = await maskrom.runFlash(code: item.code, image: plan.image,
+                                                 flashTool: flashTool) { stage in
                 switch stage {
-                case let .downloading(done, total):
-                    onEvent(.step(StepProgress(code: item.code, label: "下载镜像",
-                                               done: done, total: total)))
                 case let .flashing(pct):
                     onEvent(.step(StepProgress(metric: .percent, code: item.code,
                                                label: "刷入镜像", done: Int64(pct ?? 0),

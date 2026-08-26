@@ -24,7 +24,12 @@ struct FlashTool {
     }
 
     let executable: String
-    /// Image download directory, `/tmp/az0x-images` on a bench; a test redirects it.
+    /// Where images are kept: beside the reports, one directory per model, newest only.
+    ///
+    /// Not `/tmp` and not `~/Library/Caches`, which were both places the system is entitled to
+    /// empty. It did: two of the three model directories on this bench held nothing but their own
+    /// name, and the next run for those models would have paid 766 MB again for no reason anyone
+    /// could see. A test redirects this.
     let cacheDirectory: URL
     /// Where the published digest of a build comes from; the default reads the public GitHub API.
     let digestSource: (ImageMeta) async -> String?
@@ -37,7 +42,8 @@ struct FlashTool {
         "https://mixtile-rockchip.github.io/focalcrest-rockchip-linux-ci/snapshots/data.json")!
 
     init?(executable: String? = BundledTools.flashTool,
-          cacheDirectory: URL = URL(fileURLWithPath: "/tmp/az0x-images", isDirectory: true),
+          cacheDirectory: URL = ArchiveRoot.default.appendingPathComponent("images",
+                                                                            isDirectory: true),
           digestSource: @escaping (ImageMeta) async -> String? = { await publishedDigest(for: $0) },
           isFetchable: @escaping (URL) -> Bool = FlashTool.isTrustedImageHost) {
         guard let executable else { return nil }
@@ -79,26 +85,29 @@ struct FlashTool {
         let published = await digestSource(meta)
         if Self.isUsable(dest, expecting: meta.size), Self.passesDigest(dest, expecting: published) {
             // No progress is reported on a cache hit.
+            keepOnly(dest)
             return FetchedImage(url: dest, digestVerified: published?.isEmpty == false)
         }
         guard !meta.url.isEmpty, let url = URL(string: meta.url), isFetchable(url) else {
             throw FlashError.badImageURL(meta.url)
         }
-        let file = try await ImageCache.shared.fetch(dest, onProgress: onProgress) { report in
-            // Downloaded straight to the destination.
-            do {
-                try await Downloader.download(from: url, to: dest, onProgress: report)
-            } catch let e as DownloadError {
-                // Re-worded for the image context; the downloader knows nothing about images.
-                if case let .httpStatus(code, u) = e { throw FlashError.httpStatus(code, u) }
-                throw e
-            }
+        // No single-flight here any more. Fetching happens once, before any board is opened, so
+        // there is nothing to deduplicate — the actor that used to do it was deduplicating
+        // something that should not have been happening several times.
+        do {
+            try await Downloader.download(from: url, to: dest, onProgress: onProgress)
+        } catch let e as DownloadError {
+            // Re-worded for the image context; the downloader knows nothing about images.
+            if case let .httpStatus(code, u) = e { throw FlashError.httpStatus(code, u) }
+            throw e
         }
+        let file = dest
         guard Self.passesDigest(file, expecting: published) else {
             // Kept nowhere: a file that failed its digest would be reused as a cache hit next run.
             try? FileManager.default.removeItem(at: file)
             throw FlashError.digestMismatch(meta.asset)
         }
+        keepOnly(file)
         return FetchedImage(url: file, digestVerified: published?.isEmpty == false)
     }
 
@@ -113,22 +122,41 @@ struct FlashTool {
     /// `../../../../Library/LaunchAgents/x.plist` writes attacker-chosen bytes to a path that runs
     /// on the operator's next login, and it lands there *before* any digest is checked. Both halves
     /// are now reduced to safe components and the result is verified to be inside the cache.
+    /// Where this model's image lives. One directory per model, and only the newest file in it.
+    ///
+    /// Keyed by model rather than by build: a bench flashes the current image and nothing else, so
+    /// keeping a directory per build meant an unbounded pile of 766 MB files that only `/tmp` being
+    /// swept ever cleaned up — by accident, and at the cost of re-downloading.
     func cachePath(_ meta: ImageMeta) throws -> URL {
-        let rawBuild = [meta.tag, meta.date].first { !$0.isEmpty } ?? "unknown-build"
-        guard let build = SafePath.component(rawBuild.replacingOccurrences(of: "/", with: "-"),
-                                             maxLength: 128) else {
-            throw FlashError.unsafeIndexEntry("构建标识", rawBuild)
+        guard let board = SafePath.component(meta.board, maxLength: 64) else {
+            throw FlashError.unsafeIndexEntry("型号", meta.board)
         }
         guard let asset = SafePath.component(meta.asset, maxLength: 128) else {
             throw FlashError.unsafeIndexEntry("镜像文件名", meta.asset)
         }
         let url = cacheDirectory
-            .appendingPathComponent(build, isDirectory: true)
+            .appendingPathComponent(board, isDirectory: true)
             .appendingPathComponent(asset)
         guard SafePath.isContained(url, in: cacheDirectory) else {
             throw FlashError.unsafeIndexEntry("镜像路径", meta.asset)
         }
         return url
+    }
+
+    /// Drops every other image this model had, once the new one is in hand.
+    ///
+    /// Only after a successful fetch: a download that failed its digest must not cost the image
+    /// that was already there. An unverified new one does replace a verified old one — this batch
+    /// is going to flash the new one either way, and one file per model is a rule that stays true
+    /// without anybody maintaining it.
+    private func keepOnly(_ image: URL) {
+        let dir = image.deletingLastPathComponent()
+        let others = (try? FileManager.default.contentsOfDirectory(at: dir,
+                                                                   includingPropertiesForKeys: nil))
+            ?? []
+        for file in others where file.lastPathComponent != image.lastPathComponent {
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     /// Hosts an image may come from.
@@ -200,16 +228,16 @@ struct FlashTool {
     static func publishedDigest(for meta: ImageMeta, releasePage: String? = nil) async -> String? {
         let page = releasePage ?? releasePageURL(forAsset: meta.url)
         guard let api = releaseAPIURL(forReleasePage: page) else { return nil }
-        return await ReleaseDigests.shared.sha256(forBuild: meta.tag, asset: meta.asset) {
-            var request = URLRequest(url: api)
-            // Short: a few kilobytes of JSON, and the download waits behind it.
-            request.timeoutInterval = 15
-            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            guard let (data, response) = try? await URLSession.shared.data(for: request),
-                  let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
-            else { return nil }
-            return sha256(inReleaseJSON: data, asset: meta.asset)
-        }
+        // Asked once per batch, because the fetch itself happens once per batch. It used to be
+        // memoised by an actor, which was deduplicating a lookup that should not have repeated.
+        var request = URLRequest(url: api)
+        // Short: a few kilobytes of JSON, and the download waits behind it.
+        request.timeoutInterval = 15
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+        else { return nil }
+        return sha256(inReleaseJSON: data, asset: meta.asset)
     }
 
     /// The release page an asset download URL belongs to: drop the file name, keep the tag.
@@ -306,19 +334,3 @@ enum FlashError: LocalizedError {
     }
 }
 
-/// One digest lookup per build, however many benches ask: the public API is rate-limited by IP.
-actor ReleaseDigests {
-    static let shared = ReleaseDigests()
-
-    private var known: [String: String] = [:]
-
-    /// Returns the remembered digest, or looks it up once. A failed lookup is not remembered.
-    func sha256(forBuild build: String, asset: String,
-                lookup: () async -> String?) async -> String? {
-        let key = "\(build)|\(asset)"
-        if let have = known[key] { return have }
-        guard let found = await lookup() else { return nil }
-        known[key] = found
-        return found
-    }
-}

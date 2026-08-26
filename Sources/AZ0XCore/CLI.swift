@@ -52,6 +52,7 @@ public enum AZ0X {
           --batch <批次号>                       盖在记录与报告名上，默认按型号-流程-时间戳
           --burnin-seconds <n>                   T06 每段时长，默认 43200
           --cycles <n>                           T07/T08 次数，默认 3000
+          --emmc-target <n>                      E05 等效全盘写次数，默认 20
           --keep-board-logs                      保留运行中拉下来的板端原始日志目录；
                                                  默认删掉，判定证据已在 run.json 里
 
@@ -183,9 +184,30 @@ public enum AZ0X {
                            deviceID: deviceID, boardSerial: boardSerial)
         if let n = o.int("burnin-seconds") { plan.burninSeconds = n }
         if let n = o.int("cycles") { plan.cycles = n }
+        if let n = o.int("emmc-target") { plan.emmcTargetN = n }
 
         let out = o.string("out").map { URL(fileURLWithPath: $0, isDirectory: true) }
         if let out { try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true) }
+
+        // Fetching is a step before the run, not part of the flashing item. One board here, so
+        // "once" is trivially true; the window does the same thing once before its boards start.
+        if items.contains(where: { TestItem.flashCodes.contains($0.code) }) {
+            var lastPct = -1
+            do {
+                plan.image = try await ImageSupply.prepare(model: model) { done, total in
+                    guard let total, total > 0 else { return }
+                    let pct = Int(Double(done) / Double(total) * 100)
+                    guard pct != lastPct else { return }
+                    lastPct = pct
+                    print("取镜像 \(pct)%")
+                }
+            } catch {
+                // Nothing is ready to flash, so no board is opened.
+                return fail("取镜像失败：\(error.localizedDescription)")
+            }
+            print("镜像：\(plan.image?.asset ?? "")"
+                + (plan.image?.digestVerified == true ? "（sha256 与 CI 记录一致）" : "（未校验）"))
+        }
 
         guard let validator = Validator.live(plan: plan, archiveFolder: out) else {
             return fail("程序内嵌工具缺失")

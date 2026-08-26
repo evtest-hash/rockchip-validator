@@ -36,6 +36,10 @@ final class AppState: ObservableObject {
     /// Bundled tools this build is missing. Nothing can run without them.
     let missingTools = MaskromScan.missingTools
 
+    /// Progress of the one fetch that precedes a batch, and why it failed if it did.
+    @Published var fetching: (done: Int64, total: Int64?)?
+    @Published var fetchError: String?
+
     /// The one registry for this process, so a second batch cannot take a board the first is on.
     private let registry = BenchRegistry()
 
@@ -120,6 +124,9 @@ final class AppState: ObservableObject {
     }
 
     /// Starts a batch on exactly the boards ticked here; nothing afterwards changes that.
+    ///
+    /// The image is fetched once, here, before any board is opened. If it cannot be had, no board is
+    /// touched: a bench that cannot be served should not be taken apart to find that out five times.
     func startBatch(root: URL = ArchiveRoot.default) {
         let boards = candidates.filter { confirmed.contains($0.deviceID) }.map(\.deviceID)
         guard !boards.isEmpty, !resolvedItems.isEmpty else { return }
@@ -128,14 +135,37 @@ final class AppState: ObservableObject {
         stamp.dateFormat = "yyyyMMdd-HHmmss"
         let batchID = "\(model.rawValue)-\(flow == .ddr ? "DDR" : "EMMC")-\(stamp.string(from: Date()))"
         let folder = root.appendingPathComponent(batchID, isDirectory: true)
+        let flashes = resolvedItems.contains { TestItem.flashCodes.contains($0.code) }
+        let chosen = model, chosenFlow = flow, items = resolvedItems, phases = burninPhases
 
-        let batch = Batch(batchID: batchID, model: model, flow: flow, items: resolvedItems,
-                          burninPhases: burninPhases, deviceIDs: boards, folder: folder)
-        batches.append(batch)
-        confirmed = []
-        screen = .console
-
-        for bench in batch.benches { drive(bench, in: batch) }
+        fetchError = nil
+        Task { [weak self] in
+            var image: PreparedImage?
+            if flashes {
+                do {
+                    image = try await ImageSupply.prepare(model: chosen) { done, total in
+                        Task { @MainActor [weak self] in self?.fetching = (done, total) }
+                    }
+                } catch {
+                    await MainActor.run {
+                        self?.fetching = nil
+                        self?.fetchError = "取镜像失败：\(error.localizedDescription)。本批次未开始。"
+                    }
+                    return
+                }
+            }
+            await MainActor.run {
+                guard let self else { return }
+                self.fetching = nil
+                let batch = Batch(batchID: batchID, model: chosen, flow: chosenFlow, items: items,
+                                  burninPhases: phases, deviceIDs: boards, folder: folder,
+                                  image: image)
+                self.batches.append(batch)
+                self.confirmed = []
+                self.screen = .console
+                for bench in batch.benches { self.drive(bench, in: batch) }
+            }
+        }
     }
 
     /// Runs one board, and gives its socket back afterwards.

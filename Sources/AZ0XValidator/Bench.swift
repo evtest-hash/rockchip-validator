@@ -201,7 +201,8 @@ final class Batch: ObservableObject, Identifiable {
     @Published var benches: [Bench]
 
     init(batchID: String, model: DeviceModel, flow: ValidationFlow, items: [TestItem],
-         burninPhases: Set<BurninPhase>, deviceIDs: [String], folder: URL?) {
+         burninPhases: Set<BurninPhase>, deviceIDs: [String], folder: URL?,
+         image: PreparedImage? = nil) {
         self.batchID = batchID
         self.model = model
         self.flow = flow
@@ -213,7 +214,7 @@ final class Batch: ObservableObject, Identifiable {
         self.benches = deviceIDs.map { id in
             Bench(deviceID: id,
                   plan: RunPlan(batchID: batchID, model: model, flow: flow, items: items,
-                                burninPhases: burninPhases, deviceID: id))
+                                burninPhases: burninPhases, deviceID: id, image: image))
         }
     }
 

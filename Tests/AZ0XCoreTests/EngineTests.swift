@@ -15,6 +15,7 @@ final class EngineTests: XCTestCase {
                         deviceID: "002-1.4-2207-350e-NA")
         p.burninSeconds = 43_200
         p.cycles = 3_000
+        p.image = readyImage
         return p
     }
 
@@ -117,6 +118,41 @@ final class EngineTests: XCTestCase {
         XCTAssertFalse(seen.isEmpty)
     }
 
+    // MARK: - Fetching is a step before the run
+
+    /// A run handed no image does not go and get one, and does not write anything.
+    ///
+    /// Fetching used to live inside the flashing item, so every board asked CI independently and
+    /// downloaded independently — which is the only reason "several boards need one download" ever
+    /// looked like a concurrency problem. It is one step that happens before the boards do.
+    func testARunWithNoImageFlashesNothingAndBlamesNoBoard() async {
+        var p = plan()
+        p.image = nil
+        let flasher = ScriptedFlasher()
+        let v = Validator(plan: p, tool: tool(), boardSession: { _ in ScriptedBench.board() },
+                          flashTool: flasher, clock: SimClock())
+        let run = await v.run { _ in }
+
+        let t04 = run.results["T04"]
+        XCTAssertFalse(t04?.condemnsMaterial ?? true, "没有镜像是我们这边的事，说明不了物料任何问题")
+        XCTAssertNil(t04?.verdict)
+        XCTAssertTrue(t04?.detail?.contains("没有可刷的镜像") == true, t04?.detail ?? "")
+        XCTAssertTrue(flasher.flashed.isEmpty, "一个字节都不该往板子上写：\(flasher.flashed)")
+        XCTAssertEqual(run.stoppedAt, "T04", "刷不了就停在这儿，别再往下跑板载项")
+    }
+
+    /// And the image it is handed is the one that reaches the board — recorded, so a report says
+    /// which build this board carries.
+    func testTheImageAReceivesIsTheOneRecorded() async {
+        let (run, _) = await execute(plan(), tool: tool(), board: ScriptedBench.board())
+        let t04 = run.results["T04"]
+
+        XCTAssertEqual(t04?.measurements.first { $0.name == "镜像" }?.value.display,
+                       "image-raw-format-AZ08.img")
+        XCTAssertEqual(t04?.measurements.first { $0.name == "镜像校验" }?.value.display,
+                       "sha256 与 CI 记录一致")
+    }
+
     // MARK: - A board that is not there
 
     /// The wait for a board used to have no limit, on the reasoning that pressing maskrom is a
@@ -211,6 +247,7 @@ final class EngineTests: XCTestCase {
                         items: TestItem.emmcItems, burninPhases: Set(BurninPhase.allCases),
                         deviceID: "002-1.4-2207-350e-NA")
         p.emmcTargetN = 20
+        p.image = readyImage
         let board = ScriptedEmmc.board()
         let v = Validator(plan: p, tool: tool(), boardSession: { _ in board },
                           flashTool: ScriptedFlasher(), clock: SimClock())

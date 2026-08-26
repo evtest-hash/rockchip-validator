@@ -38,3 +38,17 @@ final class ScriptedFlasher: Flasher, @unchecked Sendable {
                            timedOut: false, cancelled: false, outputTruncated: false)
     }
 }
+
+/// An image already on this machine, the way a caller hands one to a run now that fetching is a
+/// step of its own.
+///
+/// A real file, because the flashing item reads its size to report the average write rate — a
+/// fixture pointing at a path that does not exist silently loses that measurement.
+var readyImage: PreparedImage {
+    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("az0x-test-image.img")
+    if !FileManager.default.fileExists(atPath: url.path) {
+        try? Data(count: 803_100_000 / 1000).write(to: url)
+    }
+    return PreparedImage(url: url, asset: "image-raw-format-AZ08.img", digestVerified: true)
+}

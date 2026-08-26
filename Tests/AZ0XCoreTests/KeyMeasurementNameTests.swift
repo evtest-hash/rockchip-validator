@@ -41,6 +41,7 @@ final class KeyMeasurementNameTests: XCTestCase {
                             deviceID: "002-1.4-2207-350e-NA")
             p.burninSeconds = 43_200
             p.cycles = 3_000
+            p.image = readyImage
             let v = Validator(plan: p, tool: tool(), boardSession: { _ in board },
                               flashTool: ScriptedFlasher(), clock: SimClock())
             let run = await v.run { _ in }

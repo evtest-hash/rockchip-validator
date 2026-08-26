@@ -1,7 +1,7 @@
 import Foundation
 
 /// Byte progress callback: completed and total.
-typealias ByteProgress = (Int64, Int64?) -> Void
+public typealias ByteProgress = (Int64, Int64?) -> Void
 
 /// Large-file download with progress.
 enum Downloader {
