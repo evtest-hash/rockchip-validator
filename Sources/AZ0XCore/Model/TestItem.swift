@@ -183,9 +183,14 @@ public extension TestItem {
     /// different rules, so a batch with every item but one burn-in phase rendered as
     /// 抽测记录 in the body, was written to `-初步报告.md`, and showed no 抽测 chip.
     static func isPartial(_ items: [TestItem], flow: ValidationFlow,
-                          model: DeviceModel, burninPhases: Int) -> Bool {
+                          model: DeviceModel, burninPhases: Int,
+                          scale: RunScale = .standard) -> Bool {
         items.count < self.items(for: flow, model: model).count
             || (items.contains { $0.code == "T06" } && burninPhases < BurninPhase.allCases.count)
+            // Cutting an item short counts as much as leaving it out. An eMMC run at one twentieth
+            // of the standard used to render as 初步报告 · 全部通过, with the real figure visible
+            // only in an appendix.
+            || scale.isShortened(for: items)
     }
 
     /// Flashing item codes of the two flows, used by the sequencer's consistency check.

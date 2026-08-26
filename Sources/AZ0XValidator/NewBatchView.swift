@@ -80,6 +80,16 @@ struct NewBatchView: View {
             Label(app.estimatedDuration, systemImage: "clock")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            if !app.shortfall.isEmpty {
+                // Said here, before anything starts, and again on the report afterwards — from the
+                // same function, so the two cannot describe different runs.
+                Label("低于验收量：" + app.shortfall.joined(separator: "；")
+                    + "。本次为抽测，报告不构成物料导入结论。",
+                      systemImage: "exclamationmark.triangle")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if app.hasLongRun {
                 Label("测试期间请保持电脑开机，不要合上盖子",
                       systemImage: "bolt.horizontal.circle")
@@ -260,44 +270,86 @@ struct NewBatchView: View {
     }
 
     /// One item row. A locked item shows a lock rather than an unchecked box.
+    /// The amount this item is bounded by, in the unit it is actually bounded by.
+    ///
+    /// Hours for the burn-in, cycles for suspend and reboot, full-device writes for the eMMC
+    /// burn-in. Nothing else about an item is settable here: how the burn-in loads memory, what fio
+    /// is told to do, how long a suspend dwells are *how the measurement is taken*, and moving one
+    /// of those would make two reports incomparable without either of them saying so.
+    @ViewBuilder
+    private func scaleField(_ item: TestItem) -> some View {
+        switch item.code {
+        case "T06":
+            Stepper(value: Binding(get: { app.burninHours }, set: { app.burninHours = $0 }),
+                    in: 1...240) {
+                Text("每段 \(app.burninHours) 小时").font(.callout).monospacedDigit()
+            }
+            .fixedSize()
+        case "T07", "T08":
+            Stepper(value: Binding(get: { app.scale.cycles },
+                                   set: { app.setScale(\.cycles, $0) }),
+                    in: 1...100_000, step: stepFor(app.scale.cycles)) {
+                Text("\(app.scale.cycles) 次").font(.callout).monospacedDigit()
+            }
+            .fixedSize()
+        case "E05":
+            Stepper(value: Binding(get: { app.scale.emmcTargetN },
+                                   set: { app.setScale(\.emmcTargetN, $0) }), in: 1...500) {
+                Text("\(app.scale.emmcTargetN) 次全盘写").font(.callout).monospacedDigit()
+            }
+            .fixedSize()
+        default:
+            if item.isRecordOnly {
+                Text("仅记录").font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Coarse steps where the acceptance amount lives, so reaching it is not a thousand clicks;
+    /// fine steps down where a quick pass gets set up.
+    private func stepFor(_ value: Int) -> Int { value >= 100 ? 100 : (value >= 10 ? 10 : 1) }
+
     private func itemRow(_ item: TestItem) -> some View {
         let locked = TestItem.isLocked(item, picked: app.picked,
                                        flow: app.flow, model: app.model)
         let isOn = locked || app.picked.contains(item.code)
         return HStack(spacing: 10) {
-            // A locked item still runs, so it stays ticked; the lock says it cannot be
-            // unticked. A bare lock read as "unavailable", which is the opposite.
-            Image(systemName: isOn ? "checkmark.square.fill" : "square")
-                .font(.system(size: 17))
-                .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
-            Text(item.displayTitle)
-            if locked {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
+            // Only this half responds to a click. The stepper beside it is a control of its own, and
+            // with the tap gesture on the whole row, nudging an amount also unticked the item — the
+            // two things an operator does here sit a few pixels apart and must not share a target.
+            HStack(spacing: 10) {
+                // A locked item still runs, so it stays ticked; the lock says it cannot be
+                // unticked. A bare lock read as "unavailable", which is the opposite.
+                Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 17))
+                    .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+                Text(item.displayTitle)
+                if locked {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer(minLength: 8)
             }
-            Spacer(minLength: 8)
-            // The row ends with the scale set by this project.
-            if let load = item.workloadLabel(burninPhases: app.burninPhases.count) {
-                Text(load)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+            .contentShape(Rectangle())
+            .onTapGesture {
+                // A locked item does not respond to a click.
+                guard !locked else { return }
+                if app.picked.contains(item.code) {
+                    app.picked.remove(item.code)
+                } else {
+                    app.picked.insert(item.code)
+                }
             }
+            .help(locked ? lockReason(item) : "点击选择是否执行本项")
+
+            // How much this run will ask of the board — the one thing about an item an operator
+            // sets. It starts at the acceptance amount; lowering it makes the run a 抽测, which the
+            // summary beside this list says before anything starts.
+            if isOn { scaleField(item) }
         }
         .font(.body)
         .frame(height: 30)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            // A locked item does not respond to a click.
-            guard !locked else { return }
-            if app.picked.contains(item.code) {
-                app.picked.remove(item.code)
-            } else {
-                app.picked.insert(item.code)
-            }
-        }
-        .help(locked ? lockReason(item) : "点击选择是否执行本项")
         .accessibilityLabel("\(item.displayTitle)，\(locked ? "必跑" : (isOn ? "已选" : "未选"))")
     }
 

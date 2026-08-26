@@ -24,8 +24,22 @@ public struct ReportRenderer {
             : "# AZ0X 系列 \(isDDR ? "DDR" : "eMMC") 物料验证初步报告")
         if isPartial {
             out.append("")
-            out.append("> 本次只执行了部分测试项，**不构成物料导入结论**。"
-                     + "完整验证需覆盖本流程全部测试项。")
+            // Two ways to be partial, and the sentence has to name the one that happened. Saying
+            // "只执行了部分测试项" over a run that executed every item but cut each one short is
+            // false in a way a reader cannot catch, and shortened runs are ordinary: there is not
+            // always time for the full sequence, and a quick pass tells you whether anything is
+            // obviously wrong before days are committed to it.
+            let short = run.scale.isShortened(for: run.items)
+            let fewer = run.items.count < TestItem.items(for: run.flow, model: run.model).count
+                || run.burninPhases.count < BurninPhase.allCases.count
+            let what: String
+            switch (fewer, short) {
+            case (true, true):  what = "本次只执行了部分测试项，且部分项目未跑满验收量"
+            case (true, false): what = "本次只执行了部分测试项"
+            default:            what = "本次每项都执行了，但未跑满验收量"
+            }
+            out.append("> \(what)，**不构成物料导入结论**。"
+                     + "完整验证需覆盖本流程全部测试项，并跑满各项的验收量。")
         }
         out.append("")
         out += headerTable(run)
@@ -74,6 +88,10 @@ public struct ReportRenderer {
             scope.append("T06 仅执行 \(ranPhases) / \(BurninPhase.allCases.count) 段"
                        + (measurement(results, "T06", "执行段").map { "（\($0)）" } ?? ""))
         }
+        // Cutting an item short belongs here beside leaving one out: for the reader the consequence
+        // is the same, less of the board was exercised than the standard asks. Naming the figure
+        // against the standard is what keeps a quick pass from reading like the real thing.
+        scope += run.scale.shortfall(for: items)
         if !scope.isEmpty {
             rows.append(("抽测范围", scope.joined(separator: "；")))
         }

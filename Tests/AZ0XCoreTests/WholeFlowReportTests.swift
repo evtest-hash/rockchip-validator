@@ -66,7 +66,7 @@ final class WholeFlowReportTests: XCTestCase {
             board: .init(serial: "34376b2c031e323e", cpuid: "c0ffee0102030405",
                          chipVariant: nil, socket: "002-1.4",
                          reported: "Focalcrest AZ08 / RK3576", uptimeAtBind: 42),
-            burninPhases: BurninPhase.allCases, items: TestItem.ddrItems, results: results,
+            burninPhases: BurninPhase.allCases, scale: .standard, items: TestItem.ddrItems, results: results,
             startedAt: Date(timeIntervalSince1970: 1_787_000_000),
             finishedAt: Date(timeIntervalSince1970: 1_787_130_000),
             stoppedAt: stoppedAt, abortedAt: nil,

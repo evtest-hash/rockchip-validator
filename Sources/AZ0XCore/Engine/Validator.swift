@@ -15,9 +15,19 @@ public struct RunPlan {
     public var boardSerial: String?
 
     /// Durations and counts, so a bring-up run can be short without the shipping defaults moving.
-    public var burninSeconds: Int = Thresholds.longRunSeconds
-    public var cycles: Int = Thresholds.longRunCycles
-    public var emmcTargetN: Int = Thresholds.emmcTargetN
+    /// How much this run asks of the board. Defaults to the acceptance standard; a shortened run
+    /// says so in its own record, and its report is a 抽测记录.
+    public var scale = RunScale()
+
+    public var burninSeconds: Int {
+        get { scale.burninSeconds } set { scale.burninSeconds = newValue }
+    }
+    public var cycles: Int {
+        get { scale.cycles } set { scale.cycles = newValue }
+    }
+    public var emmcTargetN: Int {
+        get { scale.emmcTargetN } set { scale.emmcTargetN = newValue }
+    }
     /// The image to flash, when the sequence flashes. Fetched once, before any board is opened.
     public var image: PreparedImage?
 
@@ -25,9 +35,7 @@ public struct RunPlan {
                 model: DeviceModel, flow: ValidationFlow,
                 items: [TestItem], burninPhases: Set<BurninPhase>,
                 deviceID: String, boardSerial: String? = nil,
-                burninSeconds: Int = Thresholds.longRunSeconds,
-                cycles: Int = Thresholds.longRunCycles,
-                emmcTargetN: Int = Thresholds.emmcTargetN,
+                scale: RunScale = RunScale(),
                 image: PreparedImage? = nil) {
         self.batchID = batchID
         self.runID = runID
@@ -37,9 +45,7 @@ public struct RunPlan {
         self.burninPhases = burninPhases
         self.deviceID = deviceID
         self.boardSerial = boardSerial
-        self.burninSeconds = burninSeconds
-        self.cycles = cycles
-        self.emmcTargetN = emmcTargetN
+        self.scale = scale
         self.image = image
     }
 }
@@ -443,6 +449,7 @@ extension Validator {
                              socket: plan.deviceID, reported: boardIdentity,
                              uptimeAtBind: boardUptimeAtBind),
                 burninPhases: BurninPhase.ordered(plan.burninPhases),
+                scale: plan.scale,
                 items: plan.items, results: results,
                 startedAt: startedAt, finishedAt: finishedAt,
                 stoppedAt: stoppedAt, abortedAt: abortedAt,

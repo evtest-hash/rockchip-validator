@@ -11,15 +11,17 @@ final class ReportTests: XCTestCase {
 
     private func run(_ build: (inout [String: ItemResult]) -> Void,
                      stoppedAt: String? = nil, abortedAt: String? = nil,
-                     items: [TestItem] = TestItem.ddrItems) -> Run {
+                     items: [TestItem] = TestItem.ddrItems,
+                     flow: ValidationFlow = .ddr,
+                     scale: RunScale = .standard) -> Run {
         var results: [String: ItemResult] = [:]
         build(&results)
         return Run(schemaVersion: Run.currentSchema,
                    runID: "1787190336-FB1391E4", batchID: "AZ08-DDR-20260824-100000",
-                   model: .az08, flow: .ddr,
+                   model: .az08, flow: flow,
                    board: .init(serial: "34376b2c031e323e", cpuid: "c0ffee", chipVariant: nil,
                                 socket: "002-1.4", reported: "Focalcrest AZ08", uptimeAtBind: 42),
-                   burninPhases: BurninPhase.allCases,
+                   burninPhases: BurninPhase.allCases, scale: scale,
                    items: items, results: results,
                    startedAt: Date(timeIntervalSince1970: 1_787_000_000),
                    finishedAt: Date(timeIntervalSince1970: 1_787_130_000),
@@ -47,6 +49,38 @@ final class ReportTests: XCTestCase {
         XCTAssertFalse(md.contains("未取得结果"), "没有未得结果的项，就不该出现这一行")
         XCTAssertTrue(md.contains("仅记录"), "T01/T05 无判据，报告必须点明")
         XCTAssertFalse(md.contains("失败"))
+    }
+
+    /// A run that executed every item but asked far less of each than the standard.
+    ///
+    /// Found on real hardware: an eMMC run at one twentieth of the acceptance amount produced a
+    /// document headed 初步报告 · ✅ 4 项全部通过, with the real figure visible only in an appendix.
+    /// 抽测 was decided from how many items were cut and never from how far each was cut short.
+    ///
+    /// Shortened runs are ordinary and useful — there is not always time for the full sequence, and
+    /// a quick pass says whether anything is obviously wrong before days are committed. Their value
+    /// depends entirely on nobody mistaking one for the real thing.
+    func testARunThatIsShortOfTheStandardIsAnAbridgedRecord() {
+        var scale = RunScale()
+        scale.emmcTargetN = 1
+        let md = ReportRenderer.render(run(allGood, items: TestItem.emmcItems,
+                                           flow: .emmc, scale: scale))
+
+        XCTAssertTrue(md.contains("抽测记录"), "压了量就是抽测，标题必须跟着走")
+        XCTAssertTrue(md.contains("1 / 20 次全盘写"), "少了多少要写出来，对着验收量写：\n\(md)")
+        XCTAssertTrue(md.contains("未跑满验收量"), "提示词要说对是哪一种：\n\(md)")
+        XCTAssertFalse(md.contains("只执行了部分测试项，**"),
+                       "每一项都跑了，说「只执行了部分测试项」是读者查不出来的假话")
+        XCTAssertFalse(md.contains("全部通过"))
+    }
+
+    /// Asking more than the standard is not a shortfall.
+    func testARunStricterThanTheStandardReadsNormally() {
+        var scale = RunScale()
+        scale.cycles = 5_000
+        let md = ReportRenderer.render(run(allGood, scale: scale))
+
+        XCTAssertFalse(md.contains("抽测"), "比验收量更严不是抽测：\n\(md)")
     }
 
     // MARK: - The case the first iteration could not report honestly

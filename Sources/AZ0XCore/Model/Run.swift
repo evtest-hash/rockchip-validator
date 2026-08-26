@@ -22,6 +22,9 @@ public struct Run: Codable {
     public let flow: ValidationFlow
     public let board: Board
     public let burninPhases: [BurninPhase]
+    /// What this run asked of the board. Recorded so the report can say when it asked for less than
+    /// the acceptance standard, which it could not see before.
+    public let scale: RunScale
 
     public let items: [TestItem]
     public let results: [String: ItemResult]
@@ -99,7 +102,7 @@ public extension Run {
     /// all three from here, or they contradict each other.
     var isPartial: Bool {
         if TestItem.isPartial(items, flow: flow, model: model,
-                              burninPhases: burninPhases.count) { return true }
+                              burninPhases: burninPhases.count, scale: scale) { return true }
         return (ranBurninPhases ?? BurninPhase.allCases.count) < BurninPhase.allCases.count
     }
 

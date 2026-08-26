@@ -195,6 +195,7 @@ final class Batch: ObservableObject, Identifiable {
     let items: [TestItem]
     let burninPhases: Set<BurninPhase>
     let folder: URL?
+    let scale: RunScale
     let startedAt: Date
     /// Formatted once: the console redraws every second and this cannot change.
     let startedText: String
@@ -202,19 +203,21 @@ final class Batch: ObservableObject, Identifiable {
 
     init(batchID: String, model: DeviceModel, flow: ValidationFlow, items: [TestItem],
          burninPhases: Set<BurninPhase>, deviceIDs: [String], folder: URL?,
-         image: PreparedImage? = nil) {
+         scale: RunScale = .standard, image: PreparedImage? = nil) {
         self.batchID = batchID
         self.model = model
         self.flow = flow
         self.items = items
         self.burninPhases = burninPhases
         self.folder = folder
+        self.scale = scale
         self.startedAt = Date()
         self.startedText = operatorStamp.string(from: Date())
         self.benches = deviceIDs.map { id in
             Bench(deviceID: id,
                   plan: RunPlan(batchID: batchID, model: model, flow: flow, items: items,
-                                burninPhases: burninPhases, deviceID: id, image: image))
+                                burninPhases: burninPhases, deviceID: id,
+                                scale: scale, image: image))
         }
     }
 
@@ -229,13 +232,15 @@ final class Batch: ObservableObject, Identifiable {
     /// A partial batch states its scope; it cannot conclude that the material may be imported. The
     /// same rule the report's title and file name use, so the three cannot disagree.
     var isPartial: Bool {
-        TestItem.isPartial(items, flow: flow, model: model, burninPhases: burninPhases.count)
+        TestItem.isPartial(items, flow: flow, model: model,
+                           burninPhases: burninPhases.count, scale: scale)
     }
 
     var scopeText: String {
         var parts: [String] = []
         let full = TestItem.items(for: flow, model: model).count
         if items.count < full { parts.append("\(items.count)/\(full) 项") }
+        parts += scale.shortfall(for: items)
         if burninPhases.count < BurninPhase.allCases.count {
             parts.append("拷机 \(burninPhases.count)/\(BurninPhase.allCases.count) 段")
         }

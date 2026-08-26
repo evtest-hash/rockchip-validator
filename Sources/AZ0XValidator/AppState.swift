@@ -18,6 +18,13 @@ final class AppState: ObservableObject {
     @Published var flow: ValidationFlow = .ddr { didSet { resetSelection() } }
     @Published var picked: Set<String> = []
     @Published var burninPhases: Set<BurninPhase> = Set(BurninPhase.allCases)
+    /// How much this batch will ask of each board. Starts at the acceptance standard.
+    ///
+    /// The operator may lower it — there is not always time for the full sequence, and a quick pass
+    /// says whether anything is obviously wrong before days are committed — and may raise it, which
+    /// is stricter than the standard rather than weaker. Lowering it makes the run a 抽测, said on
+    /// this screen before it starts and again on the report afterwards.
+    @Published var scale = RunScale()
     /// Device ids the operator has ticked.
     @Published var confirmed: Set<String> = []
 
@@ -50,6 +57,19 @@ final class AppState: ObservableObject {
     private func resetSelection() {
         picked = Set(TestItem.optionalItems(for: flow, model: model).map(\.code))
         burninPhases = Set(BurninPhase.allCases)
+        scale = RunScale()
+    }
+
+    /// Zero would be no test at all, so one is the floor. There is no ceiling: a stricter run is
+    /// the operator's to ask for, and the report records what was actually asked.
+    func setScale(_ keyPath: WritableKeyPath<RunScale, Int>, _ value: Int) {
+        scale[keyPath: keyPath] = max(1, value)
+    }
+
+    /// Burn-in is entered in hours, which is the unit the item is bounded by.
+    var burninHours: Int {
+        get { max(1, scale.burninSeconds / 3600) }
+        set { scale.burninSeconds = max(1, newValue) * 3600 }
     }
 
     var resolvedItems: [TestItem] {
@@ -57,8 +77,12 @@ final class AppState: ObservableObject {
     }
     var isPartialRun: Bool {
         TestItem.isPartial(resolvedItems, flow: flow, model: model,
-                           burninPhases: burninPhases.count)
+                           burninPhases: burninPhases.count, scale: scale)
     }
+
+    /// What this run asks less of than the standard, for the warning before it starts. The report
+    /// says the same thing afterwards, from the same function.
+    var shortfall: [String] { scale.shortfall(for: resolvedItems) }
     var hasLongRun: Bool { resolvedItems.contains(where: \.isLongRunning) }
 
     var allBenches: [Bench] { batches.flatMap(\.benches) }
@@ -71,16 +95,16 @@ final class AppState: ObservableObject {
     var estimatedDuration: String {
         var parts: [String] = []
         if resolvedItems.contains(where: { $0.code == "T06" }) {
-            parts.append("拷机 \(TestItem.hoursText(Thresholds.longRunSeconds * burninPhases.count))")
+            parts.append("拷机 \(TestItem.hoursText(scale.burninSeconds * burninPhases.count))")
         }
         if resolvedItems.contains(where: { $0.code == "T07" }) {
-            parts.append("休眠唤醒 \(Thresholds.longRunCycles) 次")
+            parts.append("休眠唤醒 \(scale.cycles) 次")
         }
         if resolvedItems.contains(where: { $0.code == "T08" }) {
-            parts.append("重启 \(Thresholds.longRunCycles) 次")
+            parts.append("重启 \(scale.cycles) 次")
         }
         if resolvedItems.contains(where: { $0.code == "E05" }) {
-            parts.append("eMMC 拷机 \(Thresholds.emmcTargetN) 次全盘写")
+            parts.append("eMMC 拷机 \(scale.emmcTargetN) 次全盘写")
         }
         return parts.isEmpty ? "本次不含长测项" : parts.joined(separator: "；")
     }
@@ -137,6 +161,7 @@ final class AppState: ObservableObject {
         let folder = root.appendingPathComponent(batchID, isDirectory: true)
         let flashes = resolvedItems.contains { TestItem.flashCodes.contains($0.code) }
         let chosen = model, chosenFlow = flow, items = resolvedItems, phases = burninPhases
+        let asked = scale
 
         fetchError = nil
         Task { [weak self] in
@@ -159,7 +184,7 @@ final class AppState: ObservableObject {
                 self.fetching = nil
                 let batch = Batch(batchID: batchID, model: chosen, flow: chosenFlow, items: items,
                                   burninPhases: phases, deviceIDs: boards, folder: folder,
-                                  image: image)
+                                  scale: asked, image: image)
                 self.batches.append(batch)
                 self.confirmed = []
                 self.screen = .console
