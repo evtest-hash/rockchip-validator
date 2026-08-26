@@ -7,3 +7,7 @@ dist/
 # Pinned in Packaging/tools.lock and fetched with sha256 verified, never committed:
 # 43 MB of third-party binaries, one of them Google's adb, in a public repository.
 Vendor/
+
+# Regenerated from Packaging/AppIcon.png by make-appicon.sh, which build-app.sh runs when it is
+# missing. The master image stays in git: it is a design artefact, not something code can redraw.
+Packaging/AppIcon.icns
