@@ -18,6 +18,8 @@ struct RootView: View {
                 }
             case .newBatch:
                 NewBatchView()
+            case .history:
+                HistoryView()
             }
         }
         .frame(minWidth: 900, minHeight: 660)

@@ -85,3 +85,78 @@ public enum MaskromScan {
         await Adb.onlineSerials()
     }
 }
+
+// MARK: - Reading the archive back
+
+public extension RunStore {
+
+    /// One past run, read off the archive.
+    struct Past: Identifiable {
+        public let run: Run
+        public let folder: URL
+        public let reportURL: URL?
+        public var id: String { folder.path }
+    }
+
+    /// One batch's worth of them: a batch folder holding a folder per board.
+    struct PastBatch: Identifiable {
+        public let batchID: String
+        public let folder: URL
+        public let runs: [Past]
+        public var id: String { folder.path }
+        /// When the earliest of its boards started.
+        public var startedAt: Date? { runs.compactMap(\.run.startedAt).min() }
+        public var model: DeviceModel? { runs.first?.run.model }
+        public var flow: ValidationFlow? { runs.first?.run.flow }
+    }
+
+    /// Past batches, newest first.
+    ///
+    /// A record this build cannot read is skipped without a word. The archive accumulates across
+    /// versions of this program and across the generation before it, and a list that explained every
+    /// unreadable folder would be mostly explanations. Nothing is written, renamed or removed here —
+    /// clearing the archive is done in Finder.
+    ///
+    /// Ordered by folder date rather than by the timestamp in the batch id: sorting those
+    /// lexically puts AZ04A ahead of AZ08 whatever the day, because the model comes first in the
+    /// name. Read on demand, `limit` folders at a time — a bench doing twenty runs a day fills this
+    /// directory with thousands of them, and none of that may be parsed to draw one screen.
+    static func past(in root: URL = ArchiveRoot.default, limit: Int = 50) -> [PastBatch] {
+        let fm = FileManager.default
+        guard let dirs = try? fm.contentsOfDirectory(
+            at: root, includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
+            options: [.skipsHiddenFiles]) else { return [] }
+
+        return dirs
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+            .filter { $0.lastPathComponent != "images" }
+            .map { ($0, (try? $0.resourceValues(forKeys: [.contentModificationDateKey])
+                            .contentModificationDate) ?? .distantPast) }
+            .sorted { $0.1 > $1.1 }
+            .prefix(limit)
+            .compactMap { batch(at: $0.0) }
+    }
+
+    private static func batch(at folder: URL) -> PastBatch? {
+        let fm = FileManager.default
+        let boards = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil,
+                                                  options: [.skipsHiddenFiles])) ?? []
+        let runs = boards.compactMap { read(board: $0) }
+        guard !runs.isEmpty else { return nil }
+        return PastBatch(batchID: folder.lastPathComponent, folder: folder,
+                         runs: runs.sorted { $0.run.boardName < $1.run.boardName })
+    }
+
+    private static func read(board folder: URL) -> Past? {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let data = try? Data(contentsOf: folder.appendingPathComponent("run.json")),
+              let run = try? decoder.decode(Run.self, from: data),
+              run.schemaVersion == Run.currentSchema
+        else { return nil }
+        let report = (try? FileManager.default.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]))?
+            .first { $0.pathExtension == "md" }
+        return Past(run: run, folder: folder, reportURL: report)
+    }
+}

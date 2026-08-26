@@ -149,40 +149,7 @@ public struct ReportRenderer {
     /// say so except by sounding like a failure. Three rows say three different things and none of
     /// them can be mistaken for another.
     private static func verdictRows(_ run: Run) -> [(String, String)] {
-        var rows: [(String, String)] = []
-        let notRun = run.notRunItems
-        let notPassed = run.notPassedItems
-        let passed = run.passedItems
-        func title(_ code: String) -> String {
-            run.items.first { $0.code == code }?.displayTitle ?? code
-        }
-
-        // Row 1 — what this run did. It reports the outcome of the criteria and stops there.
-        //
-        // Every clause that told the reader what to make of that is gone: 不构成物料导入结论 said
-        // whether the material may be imported, which is a decision for a person, and 不构成物料判定
-        // interpreted a fact the row below already explains item by item. The counts are the facts;
-        // reading them is not the software's job.
-        if let stopped = run.stoppedAt, run.results[stopped]?.condemnsMaterial == true {
-            let why = run.results[stopped]?.detail ?? ""
-            rows.append(("执行结果",
-                         "❌ 已在 \(title(stopped)) 终止\(why.isEmpty ? "" : "：\(why)")"
-                       + "；后续 \(notRun.count) 项未执行"))
-        } else if !notPassed.isEmpty {
-            rows.append(("执行结果",
-                         "❌ \(notPassed.count) 项未通过（"
-                       + notPassed.map(\.displayTitle).joined(separator: "、") + "）"))
-        } else if !notRun.isEmpty {
-            rows.append(("执行结果",
-                         "⚠️ 未完成：\(passed.count) 项通过，\(notRun.count) 项未执行（"
-                       + notRun.map(\.displayTitle).joined(separator: "、")
-                       + "）"))
-                } else if !run.noResultItems.isEmpty {
-            // "全部通过" would overclaim: something was not measured, and the row below says which.
-            rows.append(("执行结果", "✅ 已判定的 \(passed.count) 项均通过"))
-        } else {
-            rows.append(("执行结果", "✅ \(passed.count) 项全部通过"))
-        }
+        var rows: [(String, String)] = [("执行结果", outcome(run))]
 
         // Row 2 — items that reached no conclusion. Our side, never the material's.
         let noResult = run.noResultItems
@@ -205,6 +172,43 @@ public struct ReportRenderer {
                        + "）—— 本报告如实列出实测值，请依物料规格书判读"))
         }
         return rows
+    }
+
+
+    /// How one run turned out, in one line.
+    ///
+    /// Public because the history list shows the same sentence. Two places phrasing this from the
+    /// same record is how they come to disagree, and a list of past runs that says something the
+    /// report inside it does not is worse than no list.
+    public static func outcome(_ run: Run) -> String {
+        let notRun = run.notRunItems
+        let notPassed = run.notPassedItems
+        let passed = run.passedItems
+        func title(_ code: String) -> String {
+            run.items.first { $0.code == code }?.displayTitle ?? code
+        }
+
+        // It reports the outcome of the criteria and stops there. Every clause that told the reader
+        // what to make of it is gone: 不构成物料导入结论 said whether the material may be imported,
+        // which is a person's decision, and 不构成物料判定 interpreted a fact the report's next row
+        // already explains item by item. The counts are the facts; reading them is not our job.
+        if let stopped = run.stoppedAt, run.results[stopped]?.condemnsMaterial == true {
+            let why = run.results[stopped]?.detail ?? ""
+            return "❌ 已在 \(title(stopped)) 终止\(why.isEmpty ? "" : "：\(why)")"
+                 + "；后续 \(notRun.count) 项未执行"
+        }
+        if !notPassed.isEmpty {
+            return "❌ \(notPassed.count) 项未通过（"
+                 + notPassed.map(\.displayTitle).joined(separator: "、") + "）"
+        }
+        if !notRun.isEmpty {
+            return "⚠️ 未完成：\(passed.count) 项通过，\(notRun.count) 项未执行（"
+                 + notRun.map(\.displayTitle).joined(separator: "、") + "）"
+        }
+        // "全部通过" would overclaim: something was not measured, and the report's next row says
+        // which.
+        if !run.noResultItems.isEmpty { return "✅ 已判定的 \(passed.count) 项均通过" }
+        return "✅ \(passed.count) 项全部通过"
     }
 
     // MARK: - Result table

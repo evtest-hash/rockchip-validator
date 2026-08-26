@@ -21,9 +21,9 @@ final class SimClock: RunClock, @unchecked Sendable {
     }
 
     func sleep(nanoseconds: UInt64) async {
-        lock.lock()
-        value += TimeInterval(nanoseconds) / 1_000_000_000
-        lock.unlock()
+        // Scoped rather than lock/unlock: taking a lock by hand across an async boundary is an
+        // error in Swift 6, and this method is the one that has an await after it.
+        lock.withLock { value += TimeInterval(nanoseconds) / 1_000_000_000 }
         // A real sleep lets other work run; keep that so a loop under test is not a tight spin.
         await Task.yield()
     }

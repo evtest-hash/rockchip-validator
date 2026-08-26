@@ -9,7 +9,7 @@ import AZ0XCore
 @MainActor
 final class AppState: ObservableObject {
 
-    enum Screen: Equatable { case console, newBatch }
+    enum Screen: Equatable { case console, newBatch, history }
 
     @Published var screen: Screen = .console
 
@@ -45,6 +45,25 @@ final class AppState: ObservableObject {
     /// Progress of the one fetch that precedes a batch, and why it failed if it did.
     @Published var fetching: (done: Int64, total: Int64?)?
     @Published var fetchError: String?
+
+    // MARK: - Past batches
+
+    @Published var history: [RunStore.PastBatch] = []
+    @Published private(set) var historyLoading = false
+
+    /// Read when the history screen opens, not at launch.
+    ///
+    /// At launch it would slow the first thing an operator sees for something most of them are not
+    /// there for, and the archive only grows. Off the main actor because it parses every record it
+    /// lists — a batch's `run.json` is tens of kilobytes and there may be fifty of them.
+    func loadHistory(limit: Int = 50) async {
+        historyLoading = true
+        let found = await Task.detached(priority: .userInitiated) {
+            RunStore.past(limit: limit)
+        }.value
+        history = found
+        historyLoading = false
+    }
 
     /// The one registry for this process, so a second batch cannot take a board the first is on.
     private let registry = BenchRegistry()

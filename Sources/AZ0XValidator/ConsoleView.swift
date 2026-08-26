@@ -14,6 +14,12 @@ struct ConsoleView: View {
             HStack(spacing: 18) {
                 OverviewStrip(benches: app.allBenches)
                 Spacer()
+                // Secondary on purpose: 开始验证 is what this screen is for, and past batches are
+                // one click away rather than in the way.
+                Button { app.screen = .history } label: {
+                    Label("以往批次", systemImage: "clock.arrow.circlepath")
+                }
+                .buttonStyle(.borderless)
                 Button { app.newBatch() } label: {
                     Label("开始验证", systemImage: "plus")
                 }
