@@ -32,8 +32,9 @@
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
 	<!--
-	  刻意不启用 App Sandbox：maskrom 走原始 USB（RockchipDDRTestUtilityCLI 依赖 libusb），
-	  沙箱下需要额外 entitlement 且易出问题；Developer ID / ad-hoc 直接分发本就不要求沙箱。
+	  刻意不启用 App Sandbox：maskrom 走原始 USB（RockchipDDRTestUtilityCLI 经 IOKit 直连；
+	  v2.7 及以前经 libusb），沙箱下需要额外 entitlement 且易出问题；
+	  Developer ID / ad-hoc 直接分发本就不要求沙箱。
 	  同时也不做签名公证 —— 内部分发，Gatekeeper 首次点击跳过可接受（已确认的取舍）。
 	-->
 </dict>

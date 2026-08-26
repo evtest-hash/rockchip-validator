@@ -75,7 +75,28 @@ extension DdrCli.Identity {
               let cpuid = jr.json.str("cpuid"), !cpuid.isEmpty,
               let serial = jr.json.str("serial"), !serial.isEmpty
         else { return nil }
-        self.init(cpuid: cpuid, serial: serial, variant: jr.json.str("chipVariant"))
+        self.init(cpuid: cpuid, serial: Self.sixteenHexDigits(serial),
+                  variant: jr.json.str("chipVariant"))
+    }
+
+    /// The serial as the board itself will answer to it: sixteen hex digits.
+    ///
+    /// It is a 64-bit value, and the tool prints it without leading zeros while the firmware pads it
+    /// to width. Measured on a real AZ07: OTP gave 883265bf7fee7c8, fifteen digits, and the board it
+    /// flashed called itself 0883265bf7fee7c8 on adb. So the run addressed a name nothing answers
+    /// to, T04 waited out its whole 180-second allowance and failed a board that had written
+    /// correctly and booted correctly. AZ05 and AZ08 matched all along by luck — their top nibble
+    /// is not zero.
+    ///
+    /// Fixed at the source in the tool's v3.0, which pads it — verified against the same AZ07. This
+    /// stays anyway: `tools.lock` pins a version, a build pinned to an older one has to work, and
+    /// this is the one string joining the two domains. It costs nothing once the tool is right.
+    ///
+    /// Padding rather than parsing: the two strings are the same number, and this is the width the
+    /// other domain uses. Anything that is not short hex is left exactly as it came.
+    private static func sixteenHexDigits(_ raw: String) -> String {
+        guard raw.count < 16, raw.allSatisfy(\.isHexDigit) else { return raw }
+        return String(repeating: "0", count: 16 - raw.count) + raw
     }
 }
 
