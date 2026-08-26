@@ -44,8 +44,14 @@ struct MaskromItems {
     /// Runs one mode and settles the envelope. Returns nil when a verdict was produced and the
     /// item should go on to fill in its own check lists.
     private func read(_ flag: String, into r: inout ItemResult,
-                     timeout: TimeInterval = 600) async -> (json: [String: Any], mode: [String: Any])? {
-        let jr = await cli.runJSON(flag, deviceID: deviceID, timeout: timeout)
+                     timeout: TimeInterval = 600,
+                     alreadyRead: DdrCli.JSONResult? = nil)
+                     async -> (json: [String: Any], mode: [String: Any])? {
+        // `alreadyRead` is the engine's `--detect`, taken before flashing so it knows which board
+        // this is. Running it again here would be a second reading of one fact.
+        let jr: DdrCli.JSONResult
+        if let alreadyRead { jr = alreadyRead }
+        else { jr = await cli.runJSON(flag, deviceID: deviceID, timeout: timeout) }
         if let err = jr.parseError {
             r.evidence = [.log("RockchipDDRTestUtilityCLI \(flag) --json", jr.raw)]
             r.interrupted("工具未返回有效结果（非物料问题）：\(err)")
@@ -73,9 +79,10 @@ struct MaskromItems {
     /// `errorCode: ambiguousCfg` or `cfgNotFound`, which is 未得结果 by the envelope alone — and
     /// reading anything beyond `pass` and `errorCode` is a second opinion on a decision the tool has
     /// already made and published.
-    func runT01() async -> ItemResult {
+    func runT01(alreadyRead: DdrCli.JSONResult? = nil) async -> ItemResult {
         var r = ItemResult(code: "T01")
-        guard let (_, det) = await read("--detect", into: &r) else { return r }
+        guard let (_, det) = await read("--detect", into: &r, alreadyRead: alreadyRead)
+        else { return r }
 
         if let type = det.str("type"), !type.isEmpty { r.measurements.append(.text("DDR 类型", type)) }
         if let cap = det.int("capacityMB") { r.measurements.append(.num("容量", Double(cap), "MB")) }

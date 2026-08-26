@@ -51,19 +51,31 @@ extension MaskromTool {
         return false
     }
 
-    /// What the board says about itself while still in maskrom: its OTP identity.
+    /// One `--detect`, whole.
     ///
-    /// Top level, which is where v2.7 puts them — verified against a real AZ08, where `detect`
-    /// carries none of the three. An earlier revision looked inside `detect` first and fell back to
-    /// the top level; that nesting was a v2.6 shape and the fallback was doing all the work.
-    func identity(deviceID: String) async -> DdrCli.Identity? {
-        let jr = await runJSON("--detect", deviceID: deviceID, timeout: 120)
+    /// The envelope carries both of its readers' answers — the OTP identity at the top level, the
+    /// DDR geometry under `detect` — so it is read once and handed to both. It used to be run twice
+    /// on every DDR board: once here for the identity the engine needs before it may flash, and
+    /// again by T01 for the spec. Nobody decided that; the two callers sit in different layers and
+    /// neither could see the other. The cost was eight seconds, and the real problem was that the
+    /// serial in the report's header and the spec in its table came from two separate invocations
+    /// with nothing saying they agreed.
+    func detect(deviceID: String) async -> DdrCli.JSONResult {
+        await runJSON("--detect", deviceID: deviceID, timeout: 120)
+    }
+}
+
+extension DdrCli.Identity {
+    /// Read out of a `--detect` envelope. Top level, which is where v2.7 puts these — verified
+    /// against a real AZ08, where `detect` carries none of the three. An earlier revision looked
+    /// inside `detect` first and fell back to the top level; that nesting was a v2.6 shape and the
+    /// fallback was doing all the work.
+    init?(from jr: DdrCli.JSONResult) {
         guard jr.parseError == nil,
               let cpuid = jr.json.str("cpuid"), !cpuid.isEmpty,
               let serial = jr.json.str("serial"), !serial.isEmpty
         else { return nil }
-        return DdrCli.Identity(cpuid: cpuid, serial: serial,
-                               variant: jr.json.str("chipVariant"))
+        self.init(cpuid: cpuid, serial: serial, variant: jr.json.str("chipVariant"))
     }
 }
 

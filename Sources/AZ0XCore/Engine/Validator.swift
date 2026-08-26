@@ -125,10 +125,25 @@ public struct Validator {
                 return run
             }
 
-            if let identity = await tool.identity(deviceID: plan.deviceID) {
+            // One `--detect`, kept so T01 reads the same one rather than running its own.
+            let detected = await tool.detect(deviceID: plan.deviceID)
+            state.detected = detected
+            if let identity = DdrCli.Identity(from: detected) {
                 state.serial = identity.serial
                 state.cpuid = identity.cpuid
                 state.chipVariant = identity.variant
+            } else if plan.items.contains(where: { $0.domain == .board }) {
+                // Before flashing, for the same reason as the gate below: the OTP serial is how this
+                // board is found again on adb once it boots, and several boards finish flashing at
+                // once. Without it the flash still succeeds and the whole board-side half is then
+                // 未得结果 — a wasted write and a wasted run. Refused, never a verdict: not knowing
+                // which board this is says nothing about the material on it.
+                state.finish(refusing: "读不到芯片 OTP，刷机后无法在多块板里认出这一块。"
+                                     + "请检查线缆与插座，或重新按入 maskrom。",
+                             plan: plan, asPrecondition: true)
+                let run = state.run(plan: plan)
+                onEvent(.finished(run))
+                return run
             }
 
             // Caught before flashing, not after: writing an image to the wrong part is not undoable.
@@ -291,7 +306,7 @@ public struct Validator {
         let long: (LongTestProgress) -> Void = { onEvent(.longTest(code: item.code, $0)) }
 
         switch item.code {
-        case "T01": return await maskrom.runT01()
+        case "T01": return await maskrom.runT01(alreadyRead: state.detected)
         case "T02": return await maskrom.runT02()
         case "T03": return await maskrom.runT03()
         case "T04", "E01":
@@ -392,6 +407,8 @@ extension Validator {
         var serial: String?
         var cpuid: String?
         var chipVariant: String?
+        /// The `--detect` envelope read before flashing, handed to T01 so it reads the same one.
+        var detected: DdrCli.JSONResult?
         var boardIdentity: String?
         var boardUptimeAtBind: Int?
         var startedAt = Date()

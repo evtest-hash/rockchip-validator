@@ -71,18 +71,6 @@ struct DdrCli {
         let variant: String?
     }
 
-    /// Reads the identity of one board while it is still in maskrom.
-    func identity(deviceID: String) async -> Identity? {
-        let jr = await runJSON("--detect", deviceID: deviceID, timeout: 120)
-        // The tool puts these at the top level; the nested lookup is the older shape.
-        let det = jr.json.dict("detect") ?? [:]
-        func field(_ key: String) -> String? { det.str(key) ?? jr.json.str(key) }
-        guard let cpuid = field("cpuid"), !cpuid.isEmpty,
-              let serial = field("serial"), !serial.isEmpty
-        else { return nil }
-        return Identity(cpuid: cpuid, serial: serial, variant: field("chipVariant"))
-    }
-
     // MARK: - Subcommands
 
     /// Result of one `--json` subcommand.
