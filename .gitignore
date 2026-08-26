@@ -3,3 +3,7 @@
 dist/
 *.xcodeproj
 .DS_Store
+
+# Pinned in Packaging/tools.lock and fetched with sha256 verified, never committed:
+# 43 MB of third-party binaries, one of them Google's adb, in a public repository.
+Vendor/

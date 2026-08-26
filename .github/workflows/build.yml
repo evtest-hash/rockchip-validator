@@ -1,0 +1,101 @@
+# The only workflow: builds the app on demand, and releases it when a tag says to.
+#
+# Nothing runs on a push to a branch or on a pull request. Building here means a universal binary
+# and a 40 MB tool fetch, which is not worth doing on every commit for a bench with one developer
+# who runs `swift test` locally. The consequence is stated plainly: a broken commit on main is not
+# caught by anything here until someone asks for a build.
+name: Build
+
+run-name: >-
+  ${{ startsWith(github.ref, 'refs/tags/v')
+      && format('release {0}', github.ref_name)
+      || format('package only, no release · {0}', github.ref_name) }}
+
+on:
+  push:
+    tags: ['v*']
+  # No inputs: a release requires a tag, and this trigger only ever packages.
+  workflow_dispatch:
+
+permissions:
+  contents: write        # required by gh release create; without it the call returns 403
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Newer than the deployment target on purpose: what a build may run on is decided by
+    # Package.swift's platforms floor, not by the runner.
+    runs-on: macos-14
+    steps:
+      # fetch-depth: 0 because build-app.sh stamps the version from git describe, which needs tags.
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+
+      - name: Toolchain versions, for tracing build drift
+        run: swift --version && xcodebuild -version
+
+      # The bundled tools are not in the repository: they are pinned in Packaging/tools.lock and
+      # fetched with their sha256 verified. Cached on that file, so a fetch happens only when a
+      # tool version changes.
+      - name: Cache bundled tools
+        uses: actions/cache@v4
+        with:
+          path: Vendor/cache
+          key: tools-${{ hashFiles('Packaging/tools.lock') }}
+
+      # Runs without the bundled tools present, which is why it comes before the fetch: every
+      # verdict is exercised against scripted doubles, and no test needs a real tool or a board.
+      - name: Unit tests, which must pass before packaging
+        run: swift test
+
+      - name: Build the .app, universal
+        env:
+          # On a manual run github.ref_name is a branch name, so the stamp falls back to git describe.
+          AZ0X_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: ./Packaging/build-app.sh
+
+      - name: Verify signature, architectures and the declared floor
+        run: |
+          codesign --verify --deep --strict dist/AZ0XValidator.app
+          lipo -archs dist/AZ0XValidator.app/Contents/MacOS/AZ0XValidator
+          plutil -p dist/AZ0XValidator.app/Contents/Info.plist | grep -E 'Version|Minimum'
+
+      - name: Build the DMG
+        run: ./Packaging/make-dmg.sh
+
+      # The sha256 goes to the build log rather than the release page.
+      - name: Record the sha256 of the DMG
+        run: shasum -a 256 dist/*.dmg
+
+      - name: Read the version for artifact naming, taken from the app itself
+        id: ver
+        run: |
+          echo "v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+                    dist/AZ0XValidator.app/Contents/Info.plist)" >> "$GITHUB_OUTPUT"
+
+      # Actions artifacts are always delivered as a zip, which contains the DMG.
+      - name: Upload the DMG as a build artifact, creating no release
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: AZ0XValidator-${{ steps.ver.outputs.v }}
+          path: dist/*.dmg
+          retention-days: 14        # a temporary artifact for bench verification
+          if-no-files-found: error
+
+      # The release carries one DMG only.
+      - name: Create the release, with the DMG as its only asset
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            dist/*.dmg
+
+      - name: What this did not verify
+        run: echo "Compilation and unit tests only. No board is attached; hardware behaviour is unverified."

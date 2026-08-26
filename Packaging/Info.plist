@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>AZ0XValidator</string>
+	<key>CFBundleDisplayName</key>
+	<string>AZ0X 物料验证台</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.focalcrest.az0x.validator</string>
+	<key>CFBundleExecutable</key>
+	<string>AZ0XValidator</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<!-- No version keys here on purpose. build-app.sh adds them from git, so the bundle has
+	     exactly one source of truth and a stale number cannot survive in the repository.
+	     A bundle assembled without that script therefore has no version at all, which the
+	     launcher reports as an unstamped build rather than showing a plausible wrong one. -->
+	<!-- Must equal Package.swift's platforms floor; `PlatformFloorTests` refuses a drift.
+	     They disagreed once — the manifest said 13, this said 12 — so the bundle claimed to run
+	     on a system where `Grid`, `NavigationSplitView` and `.defaultSize` do not exist. It
+	     installs there and then does not work, and nothing in the build says so. -->
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<!-- 单工位应用：不做后台代理，正常前台窗口 -->
+	<key>LSUIElement</key>
+	<false/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
+	<!--
+	  刻意不启用 App Sandbox：maskrom 走原始 USB（RockchipDDRTestUtilityCLI 依赖 libusb），
+	  沙箱下需要额外 entitlement 且易出问题；Developer ID / ad-hoc 直接分发本就不要求沙箱。
+	  同时也不做签名公证 —— 内部分发，Gatekeeper 首次点击跳过可接受（已确认的取舍）。
+	-->
+</dict>
+</plist>
