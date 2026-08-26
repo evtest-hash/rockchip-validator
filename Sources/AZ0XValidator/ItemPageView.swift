@@ -94,9 +94,13 @@ struct ItemPageView: View {
                 // An unknown total uses an indeterminate bar rather than a guessed denominator.
                 if let f = step.fraction {
                     ProgressView(value: f)
-                    Text("\(Int(f * 100))%")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                    // A wait already says itself in seconds above; a percentage of an allowance is
+                    // not a second reading of anything.
+                    if step.metric != .seconds {
+                        Text("\(Int(f * 100))%")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
                     ProgressView()
                         .progressViewStyle(.linear)

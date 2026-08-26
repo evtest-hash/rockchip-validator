@@ -53,11 +53,17 @@ extension BoardSession {
     }
 
     /// Waits for this board to come back online.
+    ///
+    /// `onWait` fires each time it is still absent, with how long it has been. Without it the
+    /// longest of these waits — the one after flashing — was three minutes of silence with the
+    /// screen still reading 刷入镜像 100%.
     func waitOnline(timeout: TimeInterval,
-                    clock: any RunClock = SystemClock()) async -> Bool {
+                    clock: any RunClock = SystemClock(),
+                    onWait: ((TimeInterval) -> Void)? = nil) async -> Bool {
         let began = clock.now
         while !clock.elapsed(since: began, exceeds: timeout), !Task.isCancelled {
             if await isOnline { return true }
+            onWait?(clock.now - began)
             await clock.sleep(seconds: 2)
         }
         return false

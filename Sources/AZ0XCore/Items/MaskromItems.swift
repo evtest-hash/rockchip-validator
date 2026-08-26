@@ -189,8 +189,14 @@ struct MaskromItems {
     /// The two time-consuming stages of flashing.
     /// Progress inside the flashing item. One stage now: fetching the image is not part of this
     /// item any more, so it does not report through it either.
+    /// Flashing has two halves and only one of them used to report. The tool exiting 0 is not the
+    /// end of it: the board it wrote has to come back, and that is a criterion of this item.
     enum FlashStage {
         case flashing(Int?)
+        /// Waiting for the flashed board to appear on adb. The limit is stated because it decides
+        /// the verdict — someone watching can see how much of the allowance is left rather than
+        /// wondering whether the software has stopped.
+        case waitingForBoot(elapsed: Int, limit: Int)
     }
 
     /// Flashes the latest production image from CI.

@@ -2,8 +2,10 @@ import Foundation
 
 /// Progress of a time-consuming step inside an item. Interface state, never part of a conclusion.
 public struct StepProgress: Equatable {
-    /// Downloads are measured in bytes, which gives a known denominator.
-    public enum Metric: Equatable { case bytes, percent }
+    /// Downloads are measured in bytes, which gives a known denominator. A wait is measured in
+    /// seconds against the limit that decides it, so the number on screen is the one the criterion
+    /// is about rather than a percentage of it.
+    public enum Metric: Equatable { case bytes, percent, seconds }
     public var metric: Metric = .bytes
 
     public var code: String
@@ -27,6 +29,9 @@ public struct StepProgress: Equatable {
         switch metric {
         case .percent:
             return total == nil ? "…" : "\(done)%"
+        case .seconds:
+            guard let total else { return "已等 \(done) 秒" }
+            return "已等 \(done) 秒 / 上限 \(total) 秒"
         case .bytes:
             func mb(_ b: Int64) -> String { String(format: "%.1f MB", Double(b) / 1_000_000) }
             guard let total else { return mb(done) }

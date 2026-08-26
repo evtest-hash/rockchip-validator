@@ -310,20 +310,29 @@ public struct Validator {
         case "T02": return await maskrom.runT02()
         case "T03": return await maskrom.runT03()
         case "T04", "E01":
-            var flashed = await maskrom.runFlash(code: item.code, image: plan.image,
-                                                 flashTool: flashTool) { stage in
+            // One emitter for both halves of this item, so the wait after the write reports the way
+            // the write does.
+            let stageEvent: (MaskromItems.FlashStage) -> Void = { stage in
                 switch stage {
                 case let .flashing(pct):
                     onEvent(.step(StepProgress(metric: .percent, code: item.code,
                                                label: "刷入镜像", done: Int64(pct ?? 0),
                                                total: pct == nil ? nil : 100)))
+                case let .waitingForBoot(elapsed, limit):
+                    onEvent(.step(StepProgress(metric: .seconds, code: item.code,
+                                               label: "等待板子启动", done: Int64(elapsed),
+                                               total: Int64(limit))))
                 }
             }
+            var flashed = await maskrom.runFlash(code: item.code, image: plan.image,
+                                                 flashTool: flashTool, onStage: stageEvent)
             // Flashing is not finished when the tool exits 0; it is finished when the board it wrote
             // comes back up. Judged here rather than in the first board item, which is record-only
             // and so had no criterion to fail — a board that never booted used to read as "没测出
             // 带宽" instead of "刷完起不来".
-            if flashed.verdict == .passed { await confirmBootBack(&flashed, state: state) }
+            if flashed.verdict == .passed {
+                await confirmBootBack(&flashed, state: state, onStage: stageEvent)
+            }
             return flashed
         default:
             guard let board else {
@@ -365,7 +374,8 @@ public struct Validator {
     ///
     /// Addressed by the serial read from OTP before flashing: several boards finish flashing at once
     /// and all appear on adb together, and only the serial says which one is this bench's.
-    private func confirmBootBack(_ r: inout ItemResult, state: State) async {
+    private func confirmBootBack(_ r: inout ItemResult, state: State,
+                                 onStage: ((MaskromItems.FlashStage) -> Void)? = nil) async {
         guard let serial = state.serial else {
             // Ours, not the material's: without the serial we cannot tell this board from another.
             r.validity.append(.isTrue("已读到芯片 serial", false,
@@ -379,7 +389,10 @@ public struct Validator {
             return
         }
         let began = clock.now
-        let up = await adb.waitOnline(timeout: Double(Thresholds.bootBackSeconds), clock: clock)
+        let limit = Thresholds.bootBackSeconds
+        let up = await adb.waitOnline(timeout: Double(limit), clock: clock) { waited in
+            onStage?(.waitingForBoot(elapsed: Int(waited.rounded()), limit: limit))
+        }
         r.criteria.append(.isTrue("刷机后设备上线", up,
                                   expected: "\(Thresholds.bootBackSeconds) s 内出现序列号 \(serial) 的设备"))
         if up { r.measurements.append(.num("首次启动耗时", (clock.now - began).rounded(), "s")) }
