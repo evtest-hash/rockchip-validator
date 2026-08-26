@@ -55,9 +55,6 @@ struct SummaryView: View {
                 // Mid-run there is no verdict yet; saying where it is is the honest thing.
                 verdictRow("arrow.triangle.2.circlepath", .secondary, "验证进行中",
                            detail: runningDetail)
-            case let .aborted(at):
-                verdictRow("stop.circle.fill", .secondary,
-                           "已手动终止于 \(at)", detail: "后续项未执行")
             case let .failed(at):
                 verdictRow("xmark.octagon.fill", .red,
                            "已在 \(at) 终止", detail: terminationDetail(at))

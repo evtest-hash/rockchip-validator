@@ -95,8 +95,6 @@ final class Bench: ObservableObject, Identifiable {
         return away > Double(Thresholds.flashIdleLimitSeconds) ? .stalled : .normal
     }
 
-    static let abortConsequence = "拷机一旦停止无法续跑，本板需要从头再来。"
-
     // MARK: - Derived readings
 
     func displayState(of code: String) -> ItemDisplayState {
@@ -125,7 +123,6 @@ final class Bench: ObservableObject, Identifiable {
     var ending: Ending {
         if let refusedWhy { return .noResult(refusedWhy) }
         guard isFinished else { return .running }
-        if let aborted = run?.abortedAt { return .aborted(aborted) }
         if let stopped = run?.stoppedAt {
             return results[stopped]?.condemnsMaterial == true ? .failed(stopped)
                                                               : .noResult(stopped)
@@ -160,7 +157,7 @@ final class Bench: ObservableObject, Identifiable {
         case let .finished(run):
             self.run = run
             serial = run.board.serial ?? serial
-            terminatedAt = run.stoppedAt ?? run.abortedAt
+            terminatedAt = run.stoppedAt
             finishedAt = Date()
             isFinished = true
             runningCode = nil
@@ -177,8 +174,6 @@ final class Bench: ObservableObject, Identifiable {
         isFinished = true
         finishedAt = Date()
     }
-
-    func abort() {}
 }
 
 /// One click of 开始验证: a configuration and the boards confirmed for it.

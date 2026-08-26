@@ -69,7 +69,7 @@ final class WholeFlowReportTests: XCTestCase {
             burninPhases: BurninPhase.allCases, scale: .default, items: TestItem.ddrItems, results: results,
             startedAt: Date(timeIntervalSince1970: 1_787_000_000),
             finishedAt: Date(timeIntervalSince1970: 1_787_130_000),
-            stoppedAt: stoppedAt, abortedAt: nil,
+            stoppedAt: stoppedAt,
             toolVersions: ["RockchipDDRTestUtilityCLI 1.4.2"], appVersion: "2.0")
     }
 

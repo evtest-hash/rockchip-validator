@@ -12,8 +12,7 @@ struct RootView: View {
                 if let id = app.openBench,
                    let bench = app.allBenches.first(where: { $0.id == id }) {
                     BoardPage(bench: bench,
-                              onBack: { app.openBench = nil },
-                              onAbort: { bench.abort() })
+                              onBack: { app.openBench = nil })
                 } else {
                     ConsoleView()
                 }

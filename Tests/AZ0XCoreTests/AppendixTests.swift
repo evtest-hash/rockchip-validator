@@ -19,7 +19,7 @@ final class AppendixTests: XCTestCase {
                                 reported: nil, uptimeAtBind: 0),
                    burninPhases: BurninPhase.allCases, scale: .default,
                    items: items, results: [code: r],
-                   startedAt: nil, finishedAt: nil, stoppedAt: nil, abortedAt: nil,
+                   startedAt: nil, finishedAt: nil, stoppedAt: nil,
                    toolVersions: [], appVersion: "2.0")
     }
 

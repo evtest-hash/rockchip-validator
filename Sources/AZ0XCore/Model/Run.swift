@@ -11,7 +11,10 @@ import Foundation
 public struct Run: Codable {
 
     /// A renderer refuses a version it does not know rather than guessing at the shape.
-    public static let currentSchema = 1
+    // 2: `abortedAt` removed with the operator stop. A record written by an older build may carry
+    // it set, and this build would ignore it and render the run as having finished — which is the
+    // silent misreading this guard exists to refuse.
+    public static let currentSchema = 2
     public let schemaVersion: Int
 
     /// Identifies this run; one per board, never shared across a batch.
@@ -33,9 +36,11 @@ public struct Run: Codable {
     public let finishedAt: Date?
 
     /// The item where `Flow` said stop.
+    ///
+    /// The only way a run ends early. There is no operator stop: a validation runs to its end by
+    /// design, so nothing here records one and no report branch describes one. The field for it was
+    /// declared and never once assigned, while two buttons offered the action and did nothing.
     public let stoppedAt: String?
-    /// Set instead when the operator stopped it. Never a statement about the material.
-    public let abortedAt: String?
 
     public let toolVersions: [String]
     public let appVersion: String

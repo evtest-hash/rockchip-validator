@@ -37,7 +37,7 @@ final class GoldenReportDump: XCTestCase {
                       results: results,
                       startedAt: Date(timeIntervalSince1970: 1_787_000_000),
                       finishedAt: Date(timeIntervalSince1970: 1_787_130_000),
-                      stoppedAt: nil, abortedAt: nil,
+                      stoppedAt: nil,
                       toolVersions: ["RockchipDDRTestUtilityCLI 1.4.2"], appVersion: "2.0")
 
         let e = JSONEncoder(); e.dateEncodingStrategy = .iso8601; e.outputFormatting = .prettyPrinted

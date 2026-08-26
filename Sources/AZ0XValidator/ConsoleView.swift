@@ -52,8 +52,7 @@ struct ConsoleView: View {
                                   onOpen: { bench, target in
                                       bench.selection = target
                                       app.openBench = bench.id
-                                  },
-                                  onAbortBatch: { })
+                                  })
                     }
                 }
                 .padding(18)
@@ -103,8 +102,6 @@ private struct OverviewStrip: View {
 private struct BatchCard: View {
     @ObservedObject var batch: Batch
     var onOpen: (Bench, Bench.Selection) -> Void
-    var onAbortBatch: () -> Void
-    @State private var confirmingAbort = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -126,23 +123,6 @@ private struct BatchCard: View {
             Text("开始于 \(batch.startedText)")
                 .font(.callout.weight(.semibold))
             Spacer()
-            if batch.isRunning {
-                Button { confirmingAbort = true } label: {
-                    Text("终止批次").foregroundStyle(.red)
-                }
-                .font(.callout)
-                .controlSize(.small)
-                .buttonStyle(.bordered)
-                    // The costliest action in the application: it is the one place that
-                    // deliberately takes an extra step.
-                    .confirmationDialog("终止本批次？", isPresented: $confirmingAbort) {
-                        Button("终止 \(batch.runningCount) 块板", role: .destructive,
-                               action: onAbortBatch)
-                        Button("取消", role: .cancel) { }
-                    } message: {
-                        Text(abortWarning)
-                    }
-            }
             Text("\(batch.finishedCount)/\(batch.benches.count) 完成")
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -150,13 +130,6 @@ private struct BatchCard: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-    }
-
-    /// States the cost, since a burn-in cannot be resumed once stopped.
-    private var abortWarning: String {
-        "将终止 \(batch.runningCount) 块板，"
-            + "已运行 \(formatDuration(Date().timeIntervalSince(batch.startedAt)))。"
-            + Bench.abortConsequence
     }
 
 }
@@ -248,7 +221,6 @@ private struct BoardRow: View {
     private var finishedText: String {
         let took = bench.totalDuration.map { " · 历时 \(formatDuration($0))" } ?? ""
         switch bench.ending {
-        case let .aborted(at):  return "已手动终止于 \(at)\(took)"
         case let .failed(at):   return "在 \(at) 得出结论后结束\(took)"
         case let .noResult(at): return "未得结果，中止于 \(at)\(took)"
         case .completed, .running:
@@ -272,7 +244,6 @@ private struct BoardRow: View {
         switch bench.ending {
         case .running:
             return bench.liveness == .stalled ? ("刷写无进度", .red) : ("验证中", .secondary)
-        case .aborted:              return ("已手动终止", .secondary)
         case .noResult:             return ("未得结果", .orange)
         case .completed, .failed:   return ("已结束", .green)
         }

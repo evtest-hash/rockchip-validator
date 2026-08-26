@@ -10,7 +10,7 @@ import XCTest
 final class ReportTests: XCTestCase {
 
     private func run(_ build: (inout [String: ItemResult]) -> Void,
-                     stoppedAt: String? = nil, abortedAt: String? = nil,
+                     stoppedAt: String? = nil,
                      items: [TestItem] = TestItem.ddrItems,
                      flow: ValidationFlow = .ddr,
                      scale: RunScale = .default) -> Run {
@@ -25,7 +25,7 @@ final class ReportTests: XCTestCase {
                    items: items, results: results,
                    startedAt: Date(timeIntervalSince1970: 1_787_000_000),
                    finishedAt: Date(timeIntervalSince1970: 1_787_130_000),
-                   stoppedAt: stoppedAt, abortedAt: abortedAt,
+                   stoppedAt: stoppedAt,
                    toolVersions: [], appVersion: "2.0")
     }
 
@@ -166,19 +166,6 @@ final class ReportTests: XCTestCase {
         })
         XCTAssertTrue(md.contains("memtester FAILURE"), md)
         XCTAssertTrue(md.contains("变频失败"), md)
-    }
-
-    // MARK: - The operator's own stop
-
-    func testAnOperatorStopIsNeverAVerdict() {
-        let md = ReportRenderer.render(run({ results in
-            var t01 = ItemResult(code: "T01"); t01.conclude(); results["T01"] = t01
-        }, abortedAt: "T02"))
-
-        XCTAssertTrue(md.contains("手动终止"), md)
-        XCTAssertTrue(md.contains("后续 7 项未执行"), "停在哪、还剩几项没跑，是事实：\n\(md)")
-        XCTAssertFalse(md.contains("不构成"), "这句话是在替读者下结论：\n\(md)")
-        XCTAssertFalse(md.contains("❌"), md)
     }
 
     // MARK: - Items that never ran

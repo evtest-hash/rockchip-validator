@@ -163,11 +163,7 @@ public struct ReportRenderer {
         // whether the material may be imported, which is a decision for a person, and 不构成物料判定
         // interpreted a fact the row below already explains item by item. The counts are the facts;
         // reading them is not the software's job.
-        if let stopped = run.abortedAt {
-            rows.append(("执行结果",
-                         "⏹ 操作员已于 \(title(stopped)) 手动终止本次验证"
-                       + "；后续 \(notRun.count) 项未执行"))
-        } else if let stopped = run.stoppedAt, run.results[stopped]?.condemnsMaterial == true {
+        if let stopped = run.stoppedAt, run.results[stopped]?.condemnsMaterial == true {
             let why = run.results[stopped]?.detail ?? ""
             rows.append(("执行结果",
                          "❌ 已在 \(title(stopped)) 终止\(why.isEmpty ? "" : "：\(why)")"

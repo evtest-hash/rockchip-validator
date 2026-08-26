@@ -6,9 +6,7 @@ import AZ0XCore
 struct BoardPage: View {
     @ObservedObject var bench: Bench
     var onBack: () -> Void
-    var onAbort: () -> Void
 
-    @State private var confirmingAbort = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,32 +31,9 @@ struct BoardPage: View {
 
             Spacer()
 
-            if !bench.isFinished {
-                Button { confirmingAbort = true } label: {
-                    Label("终止验证", systemImage: "stop.circle")
-                        .foregroundStyle(.red)
-                }
-                .buttonStyle(.bordered)
-                // Stopping is not reversible, so this is one of the two places that asks.
-                .confirmationDialog("终止这块板？", isPresented: $confirmingAbort) {
-                    Button("终止验证", role: .destructive, action: onAbort)
-                    Button("取消", role: .cancel) { }
-                } message: {
-                    Text(abortWarning)
-                }
-            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
-    }
-
-    /// States the cost, since a burn-in cannot be resumed once stopped.
-    private var abortWarning: String {
-        var s = bench.elapsedText
-        if let code = bench.runningCode, let item = bench.item(code) {
-            s += "当前正在执行 \(code) \(item.title)。"
-        }
-        return s + Bench.abortConsequence
     }
 
 }

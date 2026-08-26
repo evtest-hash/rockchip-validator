@@ -397,7 +397,6 @@ extension Validator {
         var startedAt = Date()
         var finishedAt: Date?
         var stoppedAt: String?
-        var abortedAt: String?
 
         init(plan: RunPlan) {}
 
@@ -451,7 +450,7 @@ extension Validator {
                 scale: plan.scale,
                 items: plan.items, results: results,
                 startedAt: startedAt, finishedAt: finishedAt,
-                stoppedAt: stoppedAt, abortedAt: abortedAt,
+                stoppedAt: stoppedAt,
                 toolVersions: BundledTools.toolVersions, appVersion: AppVersion.display)
         }
     }

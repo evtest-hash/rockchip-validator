@@ -43,7 +43,6 @@ struct FlowView: View {
         switch bench.ending {
         case .running:   return "doc.text"
         case .completed: return "flag.checkered"
-        case .aborted:   return "stop.circle"
         case .failed:    return "xmark.octagon"
         case .noResult:  return "exclamationmark.triangle"
         }

@@ -63,13 +63,12 @@ enum ItemDisplayState: Equatable {
 /// How a board's run ended, or that it has not. A reading of the record, not state anyone keeps.
 enum Ending: Equatable {
     case running, completed
-    case aborted(String), failed(String), noResult(String)
+    case failed(String), noResult(String)
 
     var title: String {
         switch self {
         case .running:   return "验证进行中"
         case .completed: return "验证完成"
-        case .aborted:   return "已手动终止"
         case .failed:    return "已得出结论"
         case .noResult:  return "未得结果"
         }
