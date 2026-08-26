@@ -4,12 +4,12 @@ import Foundation
 extension EmmcItems {
 
     /// Equivalent full-device writes, currently 20, measured at about 1.7 hours per device.
-    static let defaultTargetN = Thresholds.emmcTargetN
+    static let defaultTargetN = RunScale.default.emmcTargetN
     static let defaultDirNum = 5
     /// Settling seconds after drop_caches.
     static let defaultSettle = 1
 
-    func runE05(targetN: Int = Thresholds.emmcTargetN,
+    func runE05(targetN: Int = RunScale.default.emmcTargetN,
                 dirNum: Int = EmmcItems.defaultDirNum,
                 settle: Int = EmmcItems.defaultSettle,
                 onProgress: ((LongTestProgress) -> Void)? = nil) async -> ItemResult {

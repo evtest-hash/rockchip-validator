@@ -1,6 +1,12 @@
 import Foundation
 
-/// All thresholds affecting verdicts and liveness. Basis of every value: docs/decisions.md.
+/// The figures that decide verdicts and liveness, none of which the operator can reach.
+///
+/// How *much* a run does — hours per burn-in phase, cycles, full-device writes — is not here. That
+/// is the operator's to set per run and lives in `RunScale`; a run is judged against what it was
+/// asked to do. What stays here is how *good* each observation has to be, which is not theirs to
+/// move: raising 起回间隔 from 300 seconds would not shorten the test, it would change what counts
+/// as a working board.
 public enum Thresholds {
 
     // MARK: - Board-side progress
@@ -63,16 +69,7 @@ public enum Thresholds {
     /// numbers may move independently.
     public static let bootBackSeconds = 180
 
-    // MARK: - Long-run scale
-
-    /// Duration of one board-side long-run phase, in seconds: 12 hours.
-    public static let longRunSeconds = 43_200
-
-    /// T07 and T08 are bounded by how many cycles the board survives, not by how many hours pass.
-    /// A count is what the test is actually about, and it is comparable between boards — two boards
-    /// that both "survived 12 hours" may have done 2571 and 1700 cycles, which the report could not
-    /// tell apart while the count was only a measurement.
-    public static let longRunCycles = 3_000
+    // MARK: - Host patience during a long run
 
     /// Slack added to a long run's declared duration before the host stops waiting, in seconds.
     ///
@@ -81,7 +78,4 @@ public enum Thresholds {
     /// board-side start-up, the final writes and clock coarseness. Half an hour is far more than
     /// any of those and needs no tuning. Basis: docs/decisions.md.
     public static let longRunMarginSeconds: TimeInterval = 1_800
-
-    /// E05 is scaled by equivalent full-device writes rather than by time.
-    public static let emmcTargetN = 20
 }

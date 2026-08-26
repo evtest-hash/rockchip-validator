@@ -98,14 +98,6 @@ public extension Run {
         return Int(v)
     }
 
-    /// A partial run is a different document, so this decides a title, a warning and a file name —
-    /// all three from here, or they contradict each other.
-    var isPartial: Bool {
-        if TestItem.isPartial(items, flow: flow, model: model,
-                              burninPhases: burninPhases.count, scale: scale) { return true }
-        return (ranBurninPhases ?? BurninPhase.allCases.count) < BurninPhase.allCases.count
-    }
-
     /// How this board is named on disk: the serial once read, the socket before that.
     var boardName: String { board.serial ?? board.socket }
 }

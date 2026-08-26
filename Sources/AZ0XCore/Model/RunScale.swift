@@ -2,16 +2,22 @@ import Foundation
 
 /// How much a run asks of a board: the durations and counts each long item is bounded by.
 ///
-/// Recorded, not inferred. A run that ran T07 five times instead of three thousand has to be able
-/// to say so in its own record, or the only trace of it is a number in an appendix and the document
-/// on top says 初步报告 · 全部通过. That is what happened: an eMMC run at one twentieth of the
-/// standard produced a report titled 初步报告, because 抽测 was decided from how many items were
-/// cut and never from how far each one was cut short.
+/// This is the run's own standard, not a reduction of some other one. Whatever was asked for when
+/// the batch started is what the items are judged against — five cycles means the criterion is five
+/// cycles, and surviving them is a real pass of a real, smaller run.
 ///
-/// Shortened runs have a real purpose — there is not always time for the full sequence, and a quick
-/// pass tells you whether anything is obviously wrong before committing days to it. That is exactly
-/// why the report must name the scale: the value of a smoke check depends on nobody mistaking it
-/// for the real thing.
+/// So the software holds no opinion about the right amount. `default` is where the new-batch screen
+/// starts and nothing more. There used to be a `standard` here, and merely calling it that grew a
+/// comparison (`shortfall`), a second report title (抽测记录), an orange warning before the run and
+/// a sentence in the report declining to draw a conclusion nobody had asked it to draw.
+///
+/// What replaces all of it is plainer: the report states these amounts, always, in the same form
+/// whether they are large or small. A pass of five cycles reads 休眠唤醒 5 次 and cannot be mistaken
+/// for a pass of three thousand, because it says five.
+///
+/// Amounts are the operator's. The figures that decide whether an observation is good enough — how
+/// long a board may be off the bus, how soon it must boot after flashing — are not, and live in
+/// `Thresholds` where the screen cannot reach them.
 public struct RunScale: Equatable, Codable {
 
     /// Seconds per burn-in phase (T06).
@@ -21,44 +27,31 @@ public struct RunScale: Equatable, Codable {
     /// Equivalent full-device writes for E05.
     public var emmcTargetN: Int
 
-    public init(burninSeconds: Int = Thresholds.longRunSeconds,
-                cycles: Int = Thresholds.longRunCycles,
-                emmcTargetN: Int = Thresholds.emmcTargetN) {
+    public init(burninSeconds: Int, cycles: Int, emmcTargetN: Int) {
         self.burninSeconds = burninSeconds
         self.cycles = cycles
         self.emmcTargetN = emmcTargetN
     }
 
-    /// The acceptance standard: what a run has to do for its verdicts to mean what they say.
-    public static let standard = RunScale()
+    /// Where a new batch starts: a starting position, not a bar to clear.
+    public static let `default` = RunScale(burninSeconds: 12 * 3_600,
+                                           cycles: 3_000,
+                                           emmcTargetN: 20)
 
-    /// Every selected item this run asks less of than the standard, worded for a person.
+    /// What this run asks of each long item it contains, worded for a person.
     ///
-    /// Only selected items count: a sequence without T08 is not "short on reboots", it simply is not
-    /// testing reboots, and the item list already says so.
-    ///
-    /// Asking *more* than the standard is not a shortfall. A run of five thousand cycles is stricter
-    /// than the standard, not weaker than it, and its report reads normally with the actual figure
-    /// recorded.
-    public func shortfall(for items: [TestItem]) -> [String] {
+    /// Unconditional and free of comparison — 休眠唤醒 5 次, never 5 / 3000 次. Showing this only
+    /// when the amounts were unusual would be the old presumed standard returning by the back door:
+    /// the reader would learn to infer a target from the software's silence.
+    public func summary(for items: [TestItem], burninPhases: Int) -> [String] {
         var out: [String] = []
         let codes = Set(items.map(\.code))
-        if codes.contains("T06"), burninSeconds < Self.standard.burninSeconds {
-            out.append("拷机每段 \(TestItem.hoursText(burninSeconds))"
-                     + " / \(TestItem.hoursText(Self.standard.burninSeconds))")
+        if codes.contains("T06") {
+            out.append("拷机 \(TestItem.durationText(burninSeconds))/段 × \(burninPhases) 段")
         }
-        if codes.contains("T07"), cycles < Self.standard.cycles {
-            out.append("休眠唤醒 \(cycles) / \(Self.standard.cycles) 次")
-        }
-        if codes.contains("T08"), cycles < Self.standard.cycles {
-            out.append("重启 \(cycles) / \(Self.standard.cycles) 次")
-        }
-        if codes.contains("E05"), emmcTargetN < Self.standard.emmcTargetN {
-            out.append("eMMC 拷机 \(emmcTargetN) / \(Self.standard.emmcTargetN) 次全盘写")
-        }
+        if codes.contains("T07") { out.append("休眠唤醒 \(cycles) 次") }
+        if codes.contains("T08") { out.append("重启 \(cycles) 次") }
+        if codes.contains("E05") { out.append("eMMC 拷机 \(emmcTargetN) 次全盘写") }
         return out
     }
-
-    /// Whether this run asks less of the board than the standard does.
-    public func isShortened(for items: [TestItem]) -> Bool { !shortfall(for: items).isEmpty }
 }

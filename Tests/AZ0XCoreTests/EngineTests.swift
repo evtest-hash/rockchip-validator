@@ -239,7 +239,9 @@ final class EngineTests: XCTestCase {
         XCTAssertFalse(events.contains { if case .waitingForBoard = $0 { return true }
                                          else { return false } },
                        "序列里没有 maskrom 项，就不该去等 maskrom")
-        XCTAssertTrue(ReportRenderer.render(run).contains("抽测"), "只跑一部分必须写明是抽测")
+        let md = ReportRenderer.render(run)
+        XCTAssertTrue(md.contains("本次范围"), "跑了哪些项、每项多少量，报告必须写：\n\(md)")
+        XCTAssertTrue(md.contains("未选"), "没跑的项要点名：\n\(md)")
     }
 
     func testAnEmmcPlanRunsItsOwnItems() async {

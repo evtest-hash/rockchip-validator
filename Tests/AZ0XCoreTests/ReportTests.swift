@@ -13,7 +13,7 @@ final class ReportTests: XCTestCase {
                      stoppedAt: String? = nil, abortedAt: String? = nil,
                      items: [TestItem] = TestItem.ddrItems,
                      flow: ValidationFlow = .ddr,
-                     scale: RunScale = .standard) -> Run {
+                     scale: RunScale = .default) -> Run {
         var results: [String: ItemResult] = [:]
         build(&results)
         return Run(schemaVersion: Run.currentSchema,
@@ -51,36 +51,47 @@ final class ReportTests: XCTestCase {
         XCTAssertFalse(md.contains("失败"))
     }
 
-    /// A run that executed every item but asked far less of each than the standard.
+    /// A run is judged against what it was asked to do, and the report says what that was.
     ///
-    /// Found on real hardware: an eMMC run at one twentieth of the acceptance amount produced a
-    /// document headed 初步报告 · ✅ 4 项全部通过, with the real figure visible only in an appendix.
-    /// 抽测 was decided from how many items were cut and never from how far each was cut short.
+    /// This replaces the whole 抽测 apparatus. Found on real hardware first: an eMMC run at one
+    /// twentieth of the then-standard produced a document headed 初步报告 · ✅ 4 项全部通过, with the
+    /// real figure visible only in an appendix. The fix at the time was a second report title and a
+    /// warning banner, both derived from a compiled-in "right" amount — which meant the software was
+    /// grading the operator's choice instead of reporting it.
     ///
-    /// Shortened runs are ordinary and useful — there is not always time for the full sequence, and
-    /// a quick pass says whether anything is obviously wrong before days are committed. Their value
-    /// depends entirely on nobody mistaking one for the real thing.
-    func testARunThatIsShortOfTheStandardIsAnAbridgedRecord() {
-        var scale = RunScale()
+    /// Now there is no right amount. What keeps a five-cycle pass from reading like a three-thousand
+    /// cycle pass is simply that the report says five, on every run, in the same words.
+    func testTheReportStatesTheAmountsItWasAskedFor() {
+        var scale = RunScale.default
         scale.emmcTargetN = 1
         let md = ReportRenderer.render(run(allGood, items: TestItem.emmcItems,
                                            flow: .emmc, scale: scale))
 
-        XCTAssertTrue(md.contains("抽测记录"), "压了量就是抽测，标题必须跟着走")
-        XCTAssertTrue(md.contains("1 / 20 次全盘写"), "少了多少要写出来，对着验收量写：\n\(md)")
-        XCTAssertTrue(md.contains("未跑满验收量"), "提示词要说对是哪一种：\n\(md)")
-        XCTAssertFalse(md.contains("只执行了部分测试项，**"),
-                       "每一项都跑了，说「只执行了部分测试项」是读者查不出来的假话")
-        XCTAssertFalse(md.contains("全部通过"))
+        XCTAssertTrue(md.contains("本次范围"), "本次要求了什么，报告必须写：\n\(md)")
+        XCTAssertTrue(md.contains("eMMC 拷机 1 次全盘写"), "量要写出来：\n\(md)")
+        XCTAssertFalse(md.contains("1 / 20"), "不写对照 —— 对照就是那个被删掉的预设标准")
+        XCTAssertFalse(md.contains("抽测"), "跑得少不是抽测，是一次小一点的验证")
+        XCTAssertTrue(md.contains("# AZ0X 系列 eMMC 物料验证报告"), "只有一种标题：\n\(md)")
     }
 
-    /// Asking more than the standard is not a shortfall.
-    func testARunStricterThanTheStandardReadsNormally() {
-        var scale = RunScale()
-        scale.cycles = 5_000
-        let md = ReportRenderer.render(run(allGood, scale: scale))
+    /// A large run and a small one produce the same document in the same form.
+    ///
+    /// If the amounts were only spelled out when they looked unusual, a reader would learn to infer
+    /// a target from the software's silence, and the presumed standard would be back.
+    func testLargeAndSmallRunsReadTheSameWay() {
+        var small = RunScale.default; small.cycles = 5
+        var large = RunScale.default; large.cycles = 5_000
 
-        XCTAssertFalse(md.contains("抽测"), "比验收量更严不是抽测：\n\(md)")
+        let a = ReportRenderer.render(run(allGood, scale: small))
+        let b = ReportRenderer.render(run(allGood, scale: large))
+
+        XCTAssertTrue(a.contains("休眠唤醒 5 次") && a.contains("重启 5 次"), a)
+        XCTAssertTrue(a.contains("项全部通过"), "判据是本次的量，跑满了就是通过，不打折：\n\(a)")
+        XCTAssertTrue(b.contains("休眠唤醒 5000 次") && b.contains("重启 5000 次"), b)
+        for md in [a, b] {
+            XCTAssertTrue(md.contains("# AZ0X 系列 DDR 物料验证报告"), "只有一种标题：\n\(md)")
+            XCTAssertFalse(md.contains("抽测"), md)
+        }
     }
 
     // MARK: - The case the first iteration could not report honestly
@@ -104,7 +115,8 @@ final class ReportTests: XCTestCase {
                        "有一项没测出结果时不该说「全部」——那是在夸大覆盖面")
         XCTAssertTrue(md.contains("未取得结果"), md)
         XCTAssertTrue(md.contains("stress-ng"), "原因要写进报告，操作员才知道去修什么")
-        XCTAssertTrue(md.contains("不构成物料判定"), md)
+        XCTAssertTrue(md.contains("环境或工具问题"), "原因要写，读者自己看得出这说明不了物料：\n\(md)")
+        XCTAssertFalse(md.contains("不构成"), "解读留给人 —— 上一行已经逐项写了为什么没结果")
         XCTAssertFalse(md.contains("❌"), "我们这一侧的问题不得渲染成不合格：\n\(md)")
     }
 
@@ -139,7 +151,7 @@ final class ReportTests: XCTestCase {
         XCTAssertTrue(md.contains("❌"), md)
         XCTAssertTrue(md.contains("memtester FAILURE"), md)
         XCTAssertTrue(md.contains("后续 2 项未执行"), md)
-        XCTAssertFalse(md.contains("不构成物料判定"), "这一条确实是对物料的判定")
+        XCTAssertFalse(md.contains("不构成"), "报告只陈述执行与判据")
     }
 
     /// Every failing criterion is listed, not only the first.
@@ -164,7 +176,8 @@ final class ReportTests: XCTestCase {
         }, abortedAt: "T02"))
 
         XCTAssertTrue(md.contains("手动终止"), md)
-        XCTAssertTrue(md.contains("不构成物料判定"), md)
+        XCTAssertTrue(md.contains("后续 7 项未执行"), "停在哪、还剩几项没跑，是事实：\n\(md)")
+        XCTAssertFalse(md.contains("不构成"), "这句话是在替读者下结论：\n\(md)")
         XCTAssertFalse(md.contains("❌"), md)
     }
 

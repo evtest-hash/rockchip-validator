@@ -203,7 +203,7 @@ final class Batch: ObservableObject, Identifiable {
 
     init(batchID: String, model: DeviceModel, flow: ValidationFlow, items: [TestItem],
          burninPhases: Set<BurninPhase>, deviceIDs: [String], folder: URL?,
-         scale: RunScale = .standard, image: PreparedImage? = nil) {
+         scale: RunScale = .default, image: PreparedImage? = nil) {
         self.batchID = batchID
         self.model = model
         self.flow = flow
@@ -229,21 +229,4 @@ final class Batch: ObservableObject, Identifiable {
     var runningCount: Int { benches.filter { !$0.isFinished }.count }
     var isRunning: Bool { runningCount > 0 }
 
-    /// A partial batch states its scope; it cannot conclude that the material may be imported. The
-    /// same rule the report's title and file name use, so the three cannot disagree.
-    var isPartial: Bool {
-        TestItem.isPartial(items, flow: flow, model: model,
-                           burninPhases: burninPhases.count, scale: scale)
-    }
-
-    var scopeText: String {
-        var parts: [String] = []
-        let full = TestItem.items(for: flow, model: model).count
-        if items.count < full { parts.append("\(items.count)/\(full) 项") }
-        parts += scale.shortfall(for: items)
-        if burninPhases.count < BurninPhase.allCases.count {
-            parts.append("拷机 \(burninPhases.count)/\(BurninPhase.allCases.count) 段")
-        }
-        return parts.joined(separator: " · ")
-    }
 }

@@ -123,10 +123,6 @@ private struct BatchCard: View {
         HStack(spacing: 10) {
             Chip(text: batch.model.rawValue, color: .blue)
             Chip(text: batch.flow.displayName, color: .secondary)
-            // A partial batch states its scope here rather than on every row.
-            if batch.isPartial {
-                Chip(text: "抽测 · \(batch.scopeText)", color: .orange)
-            }
             Text("开始于 \(batch.startedText)")
                 .font(.callout.weight(.semibold))
             Spacer()

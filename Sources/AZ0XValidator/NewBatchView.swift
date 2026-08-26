@@ -80,16 +80,6 @@ struct NewBatchView: View {
             Label(app.estimatedDuration, systemImage: "clock")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            if !app.shortfall.isEmpty {
-                // Said here, before anything starts, and again on the report afterwards — from the
-                // same function, so the two cannot describe different runs.
-                Label("低于验收量：" + app.shortfall.joined(separator: "；")
-                    + "。本次为抽测，报告不构成物料导入结论。",
-                      systemImage: "exclamationmark.triangle")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             if app.hasLongRun {
                 Label("测试期间请保持电脑开机，不要合上盖子",
                       systemImage: "bolt.horizontal.circle")
@@ -105,11 +95,6 @@ struct NewBatchView: View {
 
     private var footer: some View {
         HStack(spacing: 12) {
-            if step == 2, app.isPartialRun {
-                Text("本次只跑部分测试项，结果不构成物料导入结论")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
             Spacer()
             if step == 1 {
                 Button("取消") { app.cancelNewBatch() }
@@ -136,9 +121,8 @@ struct NewBatchView: View {
     }
 
     private var startTitle: String {
-        let verb = app.isPartialRun ? "抽测" : "验证"
         let n = app.confirmed.count
-        return n > 1 ? "开始\(verb) \(n) 块" : "开始\(verb)"
+        return n > 1 ? "开始验证 \(n) 块" : "开始验证"
     }
 
     // MARK: - Boards
@@ -243,7 +227,11 @@ struct NewBatchView: View {
                 }
                 .buttonStyle(.link)
                 .font(.caption)
-                .disabled(!app.isPartialRun)
+                // Disabled when there is nothing left to select. It used to be disabled unless the
+                // run counted as 抽测, which tied a button's availability to a judgement about the
+                // run rather than to what the button would do.
+                .disabled(app.picked == Set(optional.map(\.code))
+                          && app.burninPhases.count == BurninPhase.allCases.count)
             }
             ForEach(rows) { item in
                 // A divider between the mandatory and optional groups makes it clear why the first.
@@ -276,28 +264,34 @@ struct NewBatchView: View {
     /// burn-in. Nothing else about an item is settable here: how the burn-in loads memory, what fio
     /// is told to do, how long a suspend dwells are *how the measurement is taken*, and moving one
     /// of those would make two reports incomparable without either of them saying so.
+    /// How much of itself this item will do, chosen from a short list.
+    ///
+    /// A list rather than a number, because the amounts anyone actually wants are the default or
+    /// something much smaller for a quick look; nobody dials 2700. A free field would have meant
+    /// handling letters, punctuation, an empty box and a paste of something absurd — a lot of
+    /// surface for a knob that has four useful positions.
+    ///
+    /// Whatever is picked here is what this run is judged against, so no amount needs a warning
+    /// beside it. The default is simply first in the list.
     @ViewBuilder
     private func scaleField(_ item: TestItem) -> some View {
         switch item.code {
         case "T06":
-            Stepper(value: Binding(get: { app.burninHours }, set: { app.burninHours = $0 }),
-                    in: 1...240) {
-                Text("每段 \(app.burninHours) 小时").font(.callout).monospacedDigit()
-            }
-            .fixedSize()
+            amountPicker(Binding(get: { app.scale.burninSeconds },
+                                 set: { app.setScale(\.burninSeconds, $0) }),
+                         options: [(43_200, "12 小时/段（默认）"), (21_600, "6 小时/段"),
+                                   (7_200, "2 小时/段"), (1_800, "30 分钟/段"),
+                                   (600, "10 分钟/段"), (60, "1 分钟/段")])
         case "T07", "T08":
-            Stepper(value: Binding(get: { app.scale.cycles },
-                                   set: { app.setScale(\.cycles, $0) }),
-                    in: 1...100_000, step: stepFor(app.scale.cycles)) {
-                Text("\(app.scale.cycles) 次").font(.callout).monospacedDigit()
-            }
-            .fixedSize()
+            amountPicker(Binding(get: { app.scale.cycles },
+                                 set: { app.setScale(\.cycles, $0) }),
+                         options: [(3_000, "3000 次（默认）"), (1_000, "1000 次"),
+                                   (300, "300 次"), (100, "100 次"), (20, "20 次"), (5, "5 次")])
         case "E05":
-            Stepper(value: Binding(get: { app.scale.emmcTargetN },
-                                   set: { app.setScale(\.emmcTargetN, $0) }), in: 1...500) {
-                Text("\(app.scale.emmcTargetN) 次全盘写").font(.callout).monospacedDigit()
-            }
-            .fixedSize()
+            amountPicker(Binding(get: { app.scale.emmcTargetN },
+                                 set: { app.setScale(\.emmcTargetN, $0) }),
+                         options: [(20, "20 次全盘写（默认）"), (10, "10 次"),
+                                   (5, "5 次"), (2, "2 次"), (1, "1 次")])
         default:
             if item.isRecordOnly {
                 Text("仅记录").font(.callout).foregroundStyle(.secondary)
@@ -305,9 +299,14 @@ struct NewBatchView: View {
         }
     }
 
-    /// Coarse steps where the acceptance amount lives, so reaching it is not a thousand clicks;
-    /// fine steps down where a quick pass gets set up.
-    private func stepFor(_ value: Int) -> Int { value >= 100 ? 100 : (value >= 10 ? 10 : 1) }
+    private func amountPicker(_ value: Binding<Int>,
+                              options: [(Int, String)]) -> some View {
+        Picker("", selection: value) {
+            ForEach(options, id: \.0) { Text($0.1).tag($0.0) }
+        }
+        .labelsHidden()
+        .fixedSize()
+    }
 
     private func itemRow(_ item: TestItem) -> some View {
         let locked = TestItem.isLocked(item, picked: app.picked,
@@ -344,8 +343,8 @@ struct NewBatchView: View {
             .help(locked ? lockReason(item) : "点击选择是否执行本项")
 
             // How much this run will ask of the board — the one thing about an item an operator
-            // sets. It starts at the acceptance amount; lowering it makes the run a 抽测, which the
-            // summary beside this list says before anything starts.
+            // sets, and what the item is then judged against. No warning accompanies a small
+            // amount: the report states it, and stating it is enough.
             if isOn { scaleField(item) }
         }
         .font(.body)
@@ -386,7 +385,9 @@ struct NewBatchView: View {
                 .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
             Text(phase.title)
             Spacer(minLength: 8)
-            Text(TestItem.hoursText(Thresholds.longRunSeconds))
+            // The amount the operator set, not the compiled-in standard. This read the constant
+            // and so kept saying 12 小时 while the field above it said something else.
+            Text(TestItem.hoursText(app.scale.burninSeconds))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
@@ -414,3 +415,4 @@ struct NewBatchView: View {
     }
 
 }
+

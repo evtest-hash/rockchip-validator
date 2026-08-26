@@ -18,13 +18,12 @@ final class AppState: ObservableObject {
     @Published var flow: ValidationFlow = .ddr { didSet { resetSelection() } }
     @Published var picked: Set<String> = []
     @Published var burninPhases: Set<BurninPhase> = Set(BurninPhase.allCases)
-    /// How much this batch will ask of each board. Starts at the acceptance standard.
+    /// How much this batch asks of each board — and therefore what its items are judged against.
     ///
-    /// The operator may lower it — there is not always time for the full sequence, and a quick pass
-    /// says whether anything is obviously wrong before days are committed — and may raise it, which
-    /// is stricter than the standard rather than weaker. Lowering it makes the run a 抽测, said on
-    /// this screen before it starts and again on the report afterwards.
-    @Published var scale = RunScale()
+    /// There is no amount the software considers correct. A shorter run is a smaller run, not a
+    /// failed attempt at a larger one: five cycles means the criterion is five cycles. The report
+    /// states whatever was set here, so nobody has to be warned about it beforehand.
+    @Published var scale = RunScale.default
     /// Device ids the operator has ticked.
     @Published var confirmed: Set<String> = []
 
@@ -57,7 +56,7 @@ final class AppState: ObservableObject {
     private func resetSelection() {
         picked = Set(TestItem.optionalItems(for: flow, model: model).map(\.code))
         burninPhases = Set(BurninPhase.allCases)
-        scale = RunScale()
+        scale = RunScale.default
     }
 
     /// Zero would be no test at all, so one is the floor. There is no ceiling: a stricter run is
@@ -66,23 +65,10 @@ final class AppState: ObservableObject {
         scale[keyPath: keyPath] = max(1, value)
     }
 
-    /// Burn-in is entered in hours, which is the unit the item is bounded by.
-    var burninHours: Int {
-        get { max(1, scale.burninSeconds / 3600) }
-        set { scale.burninSeconds = max(1, newValue) * 3600 }
-    }
 
     var resolvedItems: [TestItem] {
         TestItem.resolveSelection(picked, flow: flow, model: model)
     }
-    var isPartialRun: Bool {
-        TestItem.isPartial(resolvedItems, flow: flow, model: model,
-                           burninPhases: burninPhases.count, scale: scale)
-    }
-
-    /// What this run asks less of than the standard, for the warning before it starts. The report
-    /// says the same thing afterwards, from the same function.
-    var shortfall: [String] { scale.shortfall(for: resolvedItems) }
     var hasLongRun: Bool { resolvedItems.contains(where: \.isLongRunning) }
 
     var allBenches: [Bench] { batches.flatMap(\.benches) }

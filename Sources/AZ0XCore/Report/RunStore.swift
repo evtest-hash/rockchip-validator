@@ -25,7 +25,7 @@ public enum RunStore {
         // The name has to say model, flow, when and which board without the folder around it: a
         // report gets forwarded, screenshotted and pasted somewhere else.
         let stem = "\(run.batchID)-\(run.boardName)"
-        let name = "\(stem)\(run.isPartial ? "-抽测记录" : "-初步报告").md"
+        let name = "\(stem)-报告.md"
         let url = dir.appendingPathComponent(name)
         guard (try? ReportRenderer.render(run).write(to: url, atomically: true, encoding: .utf8))
                 != nil else { return nil }

@@ -4,7 +4,7 @@ import Foundation
 extension BoardItems {
 
     /// Duration of one phase in a formal validation: 12 hours.
-    static let standardDuration = Thresholds.longRunSeconds
+    static let standardDuration = RunScale.default.burninSeconds
 
     static let boardRoot = "/userdata/az0x-ddr"
 
@@ -137,7 +137,7 @@ extension BoardItems {
     // MARK: - T07 suspend and resume, pass or fail
 
     /// Loops: set the RTC wake alarm, call pm-suspend, then stay awake after resuming.
-    func runT07(targetCycles: Int = Thresholds.longRunCycles,
+    func runT07(targetCycles: Int = RunScale.default.cycles,
                 onProgress: ((LongTestProgress) -> Void)? = nil) async -> ItemResult {
         var r = ItemResult(code: "T07")
         guard let payload = BundledTools.payload("t07_suspend.sh") else {
@@ -237,7 +237,7 @@ extension BoardItems {
     /// must still take that service back off, or the board reboots forever and someone has to notice
     /// and fix it by hand. Swift forbids `await` in a `defer`, so the body is an inner function and
     /// the removal happens here, once, after it returns.
-    func runT08(targetBoots: Int = Thresholds.longRunCycles,
+    func runT08(targetBoots: Int = RunScale.default.cycles,
                 onProgress: ((LongTestProgress) -> Void)? = nil) async -> ItemResult {
         var r = ItemResult(code: "T08")
         guard let payload = BundledTools.payload("t08_reboot.sh") else {

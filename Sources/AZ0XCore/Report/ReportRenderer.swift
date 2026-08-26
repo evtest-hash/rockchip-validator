@@ -16,31 +16,12 @@ public struct ReportRenderer {
         }
         var out: [String] = []
         let isDDR = run.flow == .ddr
-        let isPartial = run.isPartial
 
-        // A partial run and a full run differ in form, not merely by a warning line.
-        out.append(isPartial
-            ? "# AZ0X 系列 \(isDDR ? "DDR" : "eMMC") 物料**抽测记录**"
-            : "# AZ0X 系列 \(isDDR ? "DDR" : "eMMC") 物料验证初步报告")
-        if isPartial {
-            out.append("")
-            // Two ways to be partial, and the sentence has to name the one that happened. Saying
-            // "只执行了部分测试项" over a run that executed every item but cut each one short is
-            // false in a way a reader cannot catch, and shortened runs are ordinary: there is not
-            // always time for the full sequence, and a quick pass tells you whether anything is
-            // obviously wrong before days are committed to it.
-            let short = run.scale.isShortened(for: run.items)
-            let fewer = run.items.count < TestItem.items(for: run.flow, model: run.model).count
-                || run.burninPhases.count < BurninPhase.allCases.count
-            let what: String
-            switch (fewer, short) {
-            case (true, true):  what = "本次只执行了部分测试项，且部分项目未跑满验收量"
-            case (true, false): what = "本次只执行了部分测试项"
-            default:            what = "本次每项都执行了，但未跑满验收量"
-            }
-            out.append("> \(what)，**不构成物料导入结论**。"
-                     + "完整验证需覆盖本流程全部测试项，并跑满各项的验收量。")
-        }
+        // One title. There used to be two — 抽测记录 for a run that asked less than a compiled-in
+        // standard, 初步报告 otherwise — which only worked because the software held an opinion
+        // about the right amount. It no longer does: a run is judged against what it was asked to
+        // do, so every run produces the same document, and 本次范围 below says what was asked.
+        out.append("# AZ0X 系列 \(isDDR ? "DDR" : "eMMC") 物料验证报告")
         out.append("")
         out += headerTable(run)
         out.append("")
@@ -74,27 +55,25 @@ public struct ReportRenderer {
                        + "验证序列不含 \(excluded.map(\.code).joined(separator: "、"))"))
         }
 
-        // Items not selected this run are stated separately from items the model lacks.
-        let deselected = Self.deselected(flow: flow, model: model, items: items)
+        // What this run was asked to do — always stated, never measured against anything.
+        //
+        // This one row replaces the whole 抽测 apparatus. It is stronger than a warning banner was:
+        // a banner appeared once on the cover and only when something looked short, whereas this
+        // names every amount every time, so a pass of five cycles reads 休眠唤醒 5 次 and cannot be
+        // read as a pass of three thousand.
         var scope: [String] = []
-        if !deselected.isEmpty {
-            scope.append("本次仅执行 \(items.count) 项；未选 "
+        let deselected = Self.deselected(flow: flow, model: model, items: items)
+        if deselected.isEmpty {
+            scope.append("\(items.count) 项全部执行")
+        } else {
+            scope.append("执行 \(items.count) 项；未选 "
                        + deselected.map(\.code).joined(separator: "、")
                        + "（\(deselected.count) 项）")
         }
         // The phase count comes from the board-side record, which is a measurement of T06.
-        if let ranPhases = run.ranBurninPhases,
-           ranPhases < BurninPhase.allCases.count {
-            scope.append("T06 仅执行 \(ranPhases) / \(BurninPhase.allCases.count) 段"
-                       + (measurement(results, "T06", "执行段").map { "（\($0)）" } ?? ""))
-        }
-        // Cutting an item short belongs here beside leaving one out: for the reader the consequence
-        // is the same, less of the board was exercised than the standard asks. Naming the figure
-        // against the standard is what keeps a quick pass from reading like the real thing.
-        scope += run.scale.shortfall(for: items)
-        if !scope.isEmpty {
-            rows.append(("抽测范围", scope.joined(separator: "；")))
-        }
+        let phases = run.ranBurninPhases ?? run.burninPhases.count
+        scope += run.scale.summary(for: items, burninPhases: phases)
+        rows.append(("本次范围", scope.joined(separator: "；")))
 
         // The spec summary comes from the probing items' measurements.
         if isDDR {
@@ -138,7 +117,7 @@ public struct ReportRenderer {
             rows.append(("测试时间", t))
         }
 
-        rows += verdictRows(run, isPartial: !scope.isEmpty)
+        rows += verdictRows(run)
 
         var out = ["| 项目 | 信息 |", "|------|------|"]
         out += rows.map { "| \($0.0) | \(escape($0.1)) |" }
@@ -169,7 +148,7 @@ public struct ReportRenderer {
     /// single 自动判定 line, so a run where a record-only reading could not be taken had nowhere to
     /// say so except by sounding like a failure. Three rows say three different things and none of
     /// them can be mistaken for another.
-    private static func verdictRows(_ run: Run, isPartial: Bool) -> [(String, String)] {
+    private static func verdictRows(_ run: Run) -> [(String, String)] {
         var rows: [(String, String)] = []
         let notRun = run.notRunItems
         let notPassed = run.notPassedItems
@@ -178,34 +157,35 @@ public struct ReportRenderer {
             run.items.first { $0.code == code }?.displayTitle ?? code
         }
 
-        // Row 1 — the material. Nothing but a verdict may appear here.
+        // Row 1 — what this run did. It reports the outcome of the criteria and stops there.
+        //
+        // Every clause that told the reader what to make of that is gone: 不构成物料导入结论 said
+        // whether the material may be imported, which is a decision for a person, and 不构成物料判定
+        // interpreted a fact the row below already explains item by item. The counts are the facts;
+        // reading them is not the software's job.
         if let stopped = run.abortedAt {
-            rows.append(("自动判定",
+            rows.append(("执行结果",
                          "⏹ 操作员已于 \(title(stopped)) 手动终止本次验证"
-                       + "；后续 \(notRun.count) 项未执行 —— 不构成物料判定"))
+                       + "；后续 \(notRun.count) 项未执行"))
         } else if let stopped = run.stoppedAt, run.results[stopped]?.condemnsMaterial == true {
             let why = run.results[stopped]?.detail ?? ""
-            rows.append(("自动判定",
+            rows.append(("执行结果",
                          "❌ 已在 \(title(stopped)) 终止\(why.isEmpty ? "" : "：\(why)")"
                        + "；后续 \(notRun.count) 项未执行"))
         } else if !notPassed.isEmpty {
-            rows.append(("自动判定",
+            rows.append(("执行结果",
                          "❌ \(notPassed.count) 项未通过（"
                        + notPassed.map(\.displayTitle).joined(separator: "、") + "）"))
         } else if !notRun.isEmpty {
-            rows.append(("自动判定",
+            rows.append(("执行结果",
                          "⚠️ 未完成：\(passed.count) 项通过，\(notRun.count) 项未执行（"
                        + notRun.map(\.displayTitle).joined(separator: "、")
-                       + "）—— 本轮有已选测试项未执行，不构成完整结论"))
-        } else if isPartial {
-            rows.append(("自动判定",
-                         "✅ 抽测 \(passed.count) 项：已执行项均通过 —— "
-                       + "本次未覆盖完整验证序列，不构成物料导入结论"))
-        } else if !run.noResultItems.isEmpty {
+                       + "）"))
+                } else if !run.noResultItems.isEmpty {
             // "全部通过" would overclaim: something was not measured, and the row below says which.
-            rows.append(("自动判定", "✅ 已判定的 \(passed.count) 项均通过"))
+            rows.append(("执行结果", "✅ 已判定的 \(passed.count) 项均通过"))
         } else {
-            rows.append(("自动判定", "✅ \(passed.count) 项全部通过"))
+            rows.append(("执行结果", "✅ \(passed.count) 项全部通过"))
         }
 
         // Row 2 — items that reached no conclusion. Our side, never the material's.
@@ -217,7 +197,7 @@ public struct ReportRenderer {
             }
             rows.append(("未得结果",
                          "⚠️ \(noResult.count) 项未取得结果（" + detail.joined(separator: "；")
-                       + "）—— 环境或工具问题，**不构成物料判定**"))
+                       + "）—— 环境或工具问题"))
         }
 
         // Row 3 — measured, with no criterion for the software to apply.

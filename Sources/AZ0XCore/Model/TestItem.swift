@@ -156,41 +156,19 @@ public extension TestItem {
         items(for: flow, model: model).filter { $0.isOptional && $0.impliedBy == nil }
     }
 
-    /// Scale label shown at the end of the row; nil for short items.
-    ///
-    /// Each item is labelled in the unit it is actually bounded by. T07 and T08 used to be shown in
-    /// hours, taken from how long the bench was willing to wait — a figure that said nothing about
-    /// the test and stopped being true the moment a board cycled at a different speed. What they are
-    /// bounded by is a count, so a count is what the label says; how long that takes is the board's
-    /// to determine and the report's to record afterwards.
-    func workloadLabel(burninPhases: Int) -> String? {
-        switch code {
-        case "T06": return TestItem.hoursText(Thresholds.longRunSeconds * max(1, burninPhases))
-        case "T07": return "\(Thresholds.longRunCycles) 次休眠唤醒"
-        case "T08": return "\(Thresholds.longRunCycles) 次重启"
-        case "E05": return "\(Thresholds.emmcTargetN) 次全盘写"
-        default: return nil
-        }
-    }
 
-    static func hoursText(_ seconds: Int) -> String {
+    static func hoursText(_ seconds: Int) -> String { durationText(seconds) }
+
+    /// A duration as the operator set it. Sub-hour amounts read in minutes: since the screen offers
+    /// 30 分钟 and 1 分钟, rendering those as 0.5 小时 and 0.0 小时 would lose the number entirely.
+    static func durationText(_ seconds: Int) -> String {
+        if seconds < 3600 {
+            let m = Double(seconds) / 60
+            return m == m.rounded() ? "\(Int(m)) 分钟" : String(format: "%.1f 分钟", m)
+        }
         let h = Double(seconds) / 3600
         return h == h.rounded() ? "\(Int(h)) 小时"
                                 : String(format: "%.1f 小时", h)
-    }
-
-    /// Whether a selection is partial. Three layers decided this independently and with
-    /// different rules, so a batch with every item but one burn-in phase rendered as
-    /// 抽测记录 in the body, was written to `-初步报告.md`, and showed no 抽测 chip.
-    static func isPartial(_ items: [TestItem], flow: ValidationFlow,
-                          model: DeviceModel, burninPhases: Int,
-                          scale: RunScale = .standard) -> Bool {
-        items.count < self.items(for: flow, model: model).count
-            || (items.contains { $0.code == "T06" } && burninPhases < BurninPhase.allCases.count)
-            // Cutting an item short counts as much as leaving it out. An eMMC run at one twentieth
-            // of the standard used to render as 初步报告 · 全部通过, with the real figure visible
-            // only in an appendix.
-            || scale.isShortened(for: items)
     }
 
     /// Flashing item codes of the two flows, used by the sequencer's consistency check.

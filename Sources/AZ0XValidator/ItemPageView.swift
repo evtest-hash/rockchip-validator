@@ -143,7 +143,7 @@ struct ItemPageView: View {
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
                 if outcome.terminatesRun {
-                    Text("验证已终止，后续项未执行。初步报告已生成。")
+                    Text("验证已终止，后续项未执行。报告已生成。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -200,7 +200,7 @@ struct ItemPageView: View {
     }
 }
 
-/// The buttons for opening the preliminary report and its containing folder.
+/// The buttons for opening the report and its containing folder.
 struct ReportActions: View {
     @ObservedObject var bench: Bench
     @State private var exportError: String?
@@ -211,7 +211,7 @@ struct ReportActions: View {
                 Button {
                     if let url = bench.reportURL { NSWorkspace.shared.open(url) }
                 } label: {
-                    Label("打开初步报告", systemImage: "doc.text")
+                    Label("打开报告", systemImage: "doc.text")
                 }
                 .disabled(bench.reportURL == nil)
 

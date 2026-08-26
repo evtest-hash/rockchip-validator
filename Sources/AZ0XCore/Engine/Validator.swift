@@ -14,10 +14,9 @@ public struct RunPlan {
     /// flashing item. nil in the full flow, where the serial is read out of OTP in maskrom instead.
     public var boardSerial: String?
 
-    /// Durations and counts, so a bring-up run can be short without the shipping defaults moving.
-    /// How much this run asks of the board. Defaults to the acceptance standard; a shortened run
-    /// says so in its own record, and its report is a 抽测记录.
-    public var scale = RunScale()
+    /// How much this run asks of the board, and therefore what its items are judged against.
+    /// The report states these amounts plainly rather than measuring them against anything.
+    public var scale = RunScale.default
 
     public var burninSeconds: Int {
         get { scale.burninSeconds } set { scale.burninSeconds = newValue }
@@ -35,7 +34,7 @@ public struct RunPlan {
                 model: DeviceModel, flow: ValidationFlow,
                 items: [TestItem], burninPhases: Set<BurninPhase>,
                 deviceID: String, boardSerial: String? = nil,
-                scale: RunScale = RunScale(),
+                scale: RunScale = .default,
                 image: PreparedImage? = nil) {
         self.batchID = batchID
         self.runID = runID

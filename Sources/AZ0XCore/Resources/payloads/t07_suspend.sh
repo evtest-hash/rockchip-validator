@@ -14,7 +14,7 @@ S0=$(cat $PS/success 2>/dev/null || echo 0)
 log "SUSPEND_SUCCESS start=$S0"
 # Bounded by cycles alone: the acceptance standard is how many the board survives, so nothing here
 # stops for the clock. How long the host is willing to wait is the host's business and never a
-# verdict — see Thresholds.longRunPatienceSeconds.
+# verdict — the host bounds its own waiting with Thresholds.maxOfflineSeconds.
 n=0
 while [ $n -lt $TARGET ]; do
   n=$((n+1))

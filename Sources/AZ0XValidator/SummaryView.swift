@@ -57,7 +57,7 @@ struct SummaryView: View {
                            detail: runningDetail)
             case let .aborted(at):
                 verdictRow("stop.circle.fill", .secondary,
-                           "已手动终止于 \(at)", detail: "后续项未执行，不构成物料判定")
+                           "已手动终止于 \(at)", detail: "后续项未执行")
             case let .failed(at):
                 verdictRow("xmark.octagon.fill", .red,
                            "已在 \(at) 终止", detail: terminationDetail(at))
@@ -68,7 +68,7 @@ struct SummaryView: View {
                            "已在 \(at) 中止：未得结果",
                            detail: terminationDetail(at) + "（非物料判定）")
             case .completed:
-                verdictRow("checkmark.circle.fill", .green, "自动判定",
+                verdictRow("checkmark.circle.fill", .green, "执行结果",
                            detail: bench.recordOnlyItems.isEmpty
                                ? "\(bench.passedItems.count) 项全部通过"
                                : "\(bench.passedItems.count) 项通过，"
