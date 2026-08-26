@@ -75,4 +75,13 @@ public enum MaskromScan {
 
     /// Bundled tools this build is missing. Empty is the only workable answer.
     public static var missingTools: [String] { BundledTools.missingTools }
+
+    /// Serials of boards that are booted and reachable over adb.
+    ///
+    /// The other domain. A sequence that starts in maskrom never needs this — it learns the serial
+    /// from OTP — but one that runs only board items has to be told which already-flashed board it
+    /// means, and the two domains share no identifier.
+    public static func onlineSerials() async -> [String] {
+        await Adb.onlineSerials()
+    }
 }

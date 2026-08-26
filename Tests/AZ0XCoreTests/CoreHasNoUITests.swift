@@ -54,6 +54,25 @@ final class CoreHasNoUITests: XCTestCase {
         }
     }
 
+    /// And no front end of any kind: a library that runs boards must not also be a program that
+    /// talks to a person.
+    ///
+    /// The window was swept out and this test kept it out, while the command line sat in the core
+    /// the whole time doing the same kind of work — parsing arguments, deciding what to run,
+    /// printing. Both are callers. Neither belongs here, and the two of them keeping their own
+    /// copies of the same decisions is how the previous generation came to judge one thing in three
+    /// places by three different rules.
+    func testTheCoreTalksToNobody() throws {
+        for url in try coreSources() {
+            let text = try code(of: url)
+            XCTAssertFalse(text.contains("print("),
+                           "\(url.lastPathComponent) 在往终端打印。核心库只发事件，谁看、怎么显示"
+                         + "是调用方的事 —— 命令行和界面各是一个调用方。")
+            XCTAssertFalse(text.contains("CommandLine."),
+                           "\(url.lastPathComponent) 在读命令行参数。那是某一个前端的策略。")
+        }
+    }
+
     /// And no observation attributes either: those are how the coupling arrived last time.
     func testTheCoreDeclaresNoObservableState() throws {
         for url in try coreSources() {

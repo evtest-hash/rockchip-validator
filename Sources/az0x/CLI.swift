@@ -1,15 +1,20 @@
 import Foundation
+import AZ0XCore
 
-/// The only symbol this library exposes.
+/// The debugging entry point: one board, one sequence, one record.
 ///
-/// Keeping the surface to one function is what keeps the executable thin: the CLI parses arguments
-/// and prints, and every decision stays inside the core where it can be tested. It also means the
-/// model never has to be made `public` to be driven, so nothing about the internal shape is
-/// pinned by the fact that a command-line tool exists.
-public enum AZ0X {
+/// It lives in its own target rather than in the core, where it sat until now. The core had been
+/// swept of one front end — a test fails the build if it imports SwiftUI — while this one stayed
+/// inside it doing the same kind of work: parsing arguments, deciding what to run, printing. A
+/// library that runs boards should not also be a program that talks to a person.
+///
+/// Only I use it. Operators validate material through the window; this exists so that a sequence can
+/// be driven against real hardware without one — short runs, single items, two at once from a
+/// shell, output piped somewhere. Every hardware defect found so far was found through it.
+enum AZ0X {
 
     /// Runs one command. Returns the process exit status.
-    public static func run(_ arguments: [String]) async -> Int32 {
+    static func run(_ arguments: [String]) async -> Int32 {
         var args = arguments
         let command = args.isEmpty ? "help" : args.removeFirst()
 
@@ -103,16 +108,15 @@ public enum AZ0X {
     /// of these and nothing here can see across processes. Which boards to use is the caller's to
     /// decide — this only saves typing the device ids out of thin air.
     private static func listDevices(_ o: Options) async -> Int32 {
-        guard let cli = DdrCli() else { return fail("RockchipDDRTestUtilityCLI 未随程序打包") }
         let model = o.string("model").flatMap { DeviceModel(rawValue: $0.uppercased()) }
-        let devices = await cli.devices()
+        let devices = await MaskromScan.attached()
         guard !devices.isEmpty else {
             print("当前没有处于 maskrom 的板卡。")
             return 1
         }
-        let mine = model.map { m in devices.filter { $0.pid == m.maskromPID } } ?? devices
+        let mine = model.map { m in devices.filter { $0.matches(m) } } ?? devices
         for d in mine {
-            print("插座 \(DdrCli.socket(d.id))   \(d.id)   pid=\(d.pid)")
+            print("插座 \(d.socket)   \(d.deviceID)   pid=\(d.pid)")
         }
         let others = devices.count - mine.count
         if others > 0 { print("另有 \(others) 块其它型号，不在候选内") }
@@ -127,8 +131,8 @@ public enum AZ0X {
 
         let flow: ValidationFlow = (o.string("flow") ?? "ddr").lowercased() == "emmc" ? .emmc : .ddr
 
-        let missing = BundledTools.missingTools
-        guard missing.isEmpty, let cli = DdrCli() else {
+        let missing = MaskromScan.missingTools
+        guard missing.isEmpty else {
             return fail("程序内嵌工具缺失：" + missing.joined(separator: "、"))
         }
 
@@ -150,13 +154,13 @@ public enum AZ0X {
             if let given = o.string("device-id") {
                 deviceID = given
             } else {
-                let devices = await cli.devices()
+                let devices = await MaskromScan.attached()
                 guard devices.count == 1 else {
                     return fail(devices.isEmpty
                         ? "当前没有处于 maskrom 的板卡。"
                         : "有 \(devices.count) 块板在位，请用 --device-id 指定；`az0x devices` 可列出。")
                 }
-                deviceID = devices[0].id
+                deviceID = devices[0].deviceID
             }
         } else {
             // A selection with no maskrom item never sees the board there, so it is addressed by
@@ -164,7 +168,7 @@ public enum AZ0X {
             if let given = o.string("serial") {
                 boardSerial = given
             } else {
-                let online = await Adb.onlineSerials()
+                let online = await MaskromScan.onlineSerials()
                 guard online.count == 1 else {
                     return fail(online.isEmpty
                         ? "当前没有在线的 adb 板卡。板载测试要求板上已刷入我们编译的测试固件。"
