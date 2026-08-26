@@ -26,7 +26,7 @@ public struct ReportRenderer {
         out += headerTable(run)
         out.append("")
         out += resultTable(items: run.items, results: run.results,
-                          terminatedAt: run.stoppedAt)
+                          terminatedAt: run.stoppedAt, runStartedAt: run.startedAt)
         out.append("")
         out += appendices(items: run.items, results: run.results)
         return out.joined(separator: "\n") + "\n"
@@ -210,16 +210,43 @@ public struct ReportRenderer {
     // MARK: - Result table
 
     private static func resultTable(
-        items: [TestItem], results: [String: ItemResult], terminatedAt: String?
+        items: [TestItem], results: [String: ItemResult], terminatedAt: String?,
+        runStartedAt: Date?
     ) -> [String] {
         var out = ["## 测试结果", "",
-                   "| 编号 | 测试项 | 测试方法 | 测试结果 |",
-                   "|------|--------|----------|----------|"]
+                   "| 编号 | 测试项 | 测试方法 | 起止（历时） | 测试结果 |",
+                   "|------|--------|----------|--------------|----------|"]
         for item in items {
             let cell = results[item.code].map { resultCell(item: item, result: $0) } ?? "— 未执行"
-            out.append("| \(item.code) | \(item.title) | \(escape(item.method)) | \(escape(cell)) |")
+            let when = results[item.code].map { span($0, from: runStartedAt) } ?? "—"
+            out.append("| \(item.code) | \(item.title) | \(escape(item.method))"
+                     + " | \(when) | \(escape(cell)) |")
         }
         return out
+    }
+
+    /// When one item ran, and for how long.
+    ///
+    /// The record has carried this per item all along; nothing showed it. What the result column
+    /// showed instead was whatever duration each item happened to record for itself — 工具耗时 on
+    /// T03, 刷写耗时 on T04, 实际历时 on the long runs, nothing at all on T02 and T08 — so the one
+    /// question asked of every item had a different answer shape on each row, or none.
+    ///
+    /// The date appears only when it has to. A full validation runs for days: a twelve-hour phase
+    /// crosses midnight, and `22:10:04 → 10:10:07` on one line would read as a run that went
+    /// backwards. Suppressing the date when it does not change is what makes its presence mean
+    /// something.
+    private static func span(_ r: ItemResult, from runStart: Date?) -> String {
+        guard let began = r.startedAt else { return "—" }
+        guard let ended = r.finishedAt else { return "\(clockText(began, from: runStart)) → 未结束" }
+        return "\(clockText(began, from: runStart)) → \(clockText(ended, from: began))"
+             + "（\(durationText(ended.timeIntervalSince(began)))）"
+    }
+
+    /// Time of day, carrying the date only when it differs from the moment being compared against.
+    private static func clockText(_ date: Date, from earlier: Date?) -> String {
+        let sameDay = earlier.map { Calendar.current.isDate(date, inSameDayAs: $0) } ?? false
+        return (sameDay ? timeOfDay : dayAndTime).string(from: date)
     }
 
     /// Result cell of one item, read off the two axes.
@@ -429,4 +456,11 @@ public struct ReportRenderer {
     static func durationText(_ t: TimeInterval) -> String { formatDuration(t) }
 
     private static var stamp: DateFormatter { operatorStamp }
+
+    private static let timeOfDay: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f
+    }()
+    private static let dayAndTime: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "MM-dd HH:mm:ss"; return f
+    }()
 }
