@@ -76,6 +76,9 @@ final class AppState: ObservableObject {
         historyLoading = false
     }
 
+    /// The Dock, for the stretch of a run when nobody is looking at the window.
+    let dock = DockAttention.live
+
     /// The one registry for this process, so a second batch cannot take a board the first is on.
     private let registry = BenchRegistry()
 
@@ -248,7 +251,7 @@ final class AppState: ObservableObject {
 
         Task { @MainActor [weak self] in
             for await event in events { bench.apply(event) }
-            self?.finish(bench, folder: dir)
+            self?.finish(bench, folder: dir, of: batch)
             await self?.registry.release(bench.deviceID)
             await self?.scan()          // its socket is free now
         }
@@ -266,10 +269,15 @@ final class AppState: ObservableObject {
     }
 
     /// Writes the record and the report once a board has finished.
-    private func finish(_ bench: Bench, folder: URL?) {
-        guard let run = bench.run, let folder else { return }
-        bench.runFolder = folder
-        if let url = RunStore.write(run, into: folder) { bench.reportURL = url }
-        else { bench.reportError = "无法写入 \(folder.lastPathComponent)" }
+    private func finish(_ bench: Bench, folder: URL?, of batch: Batch) {
+        if let run = bench.run, let folder {
+            bench.runFolder = folder
+            if let url = RunStore.write(run, into: folder) { bench.reportURL = url }
+            else { bench.reportError = "无法写入 \(folder.lastPathComponent)" }
+        }
+        // This bench is already marked finished — the event stream ended above — so the others'
+        // state is all that is left to read. A board that was refused before it started counts as
+        // finished too: it is done, and something has to be done about it.
+        if batch.benches.allSatisfy(\.isFinished) { dock.batchFinished() }
     }
 }

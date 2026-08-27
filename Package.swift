@@ -30,7 +30,10 @@ let package = Package(
         ),
         .testTarget(
             name: "AZ0XCoreTests",
-            dependencies: ["AZ0XCore"],
+            // The interface too: its rules are behaviour, not text. Three tests here scan the UI
+            // sources as strings because they had no other way in, which is a poor substitute for
+            // running the thing.
+            dependencies: ["AZ0XCore", "AZ0XValidator"],
             path: "Tests/AZ0XCoreTests"
         ),
     ]

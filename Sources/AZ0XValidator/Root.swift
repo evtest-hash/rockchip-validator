@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import AZ0XCore
 
 /// Top-level view, switching on the current screen.
@@ -26,6 +27,10 @@ struct RootView: View {
         .task {
             // One scan on launch, so the console can say whether anything is plugged in.
             await app.scan()
+        }
+        .onReceive(NotificationCenter.default
+            .publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            app.dock.windowCameForward()
         }
     }
 }
