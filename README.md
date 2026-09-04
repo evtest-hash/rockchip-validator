@@ -3,7 +3,7 @@
 macOS 上的 Rockchip 平台来料验证工具。将待测板置于 MASKROM 模式，选定验证流程，执行完成后生成验证报告。
 
 **DDR** 八项 · **eMMC** 六项 · 支持多板并行验证。
-适用型号 AZ04A · AZ04B · AZ05 · AZ07 · AZ08
+适用型号 AZ04A · AZ04B · AZ05 · AZ07 · AZ08 · Mixtile Core3588E
 
 ---
 

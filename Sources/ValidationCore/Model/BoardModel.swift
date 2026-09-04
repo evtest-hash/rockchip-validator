@@ -53,8 +53,16 @@ public extension BoardModel {
     static let az04a = BoardModel(code: "AZ04A", soc: .rk3588)
     static let az04b = BoardModel(code: "AZ04B", soc: .rk3588, chip: "RK3588S2")
 
+    /// A second product line, on silicon this bench already validates.
+    ///
+    /// The code is short and separator-free because it names an archive directory, leads a batch
+    /// id and keys the CI image index; the vendor's name for it lives in `name`, which is what a
+    /// picker and a report show. Everything else comes from `.rk3588` — PID, probe chip, eye scan,
+    /// bus width — which is the row this catalog exists to make possible.
+    static let core3588e = BoardModel(code: "Core3588E", name: "Mixtile Core3588E", soc: .rk3588)
+
     /// Every board this build knows, in the order the picker offers them.
-    static let catalog: [BoardModel] = [.az05, .az07, .az08, .az04a, .az04b]
+    static let catalog: [BoardModel] = [.az05, .az07, .az08, .az04a, .az04b, .core3588e]
 
     /// The board a code names, or nil for one this build does not know.
     ///

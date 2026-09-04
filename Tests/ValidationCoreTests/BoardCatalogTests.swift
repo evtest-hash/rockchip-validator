@@ -58,6 +58,29 @@ final class BoardCatalogTests: XCTestCase {
         XCTAssertEqual(BoardModel.az04b.displayName, "AZ04B · RK3588S2")
     }
 
+    /// A new board on known silicon is one row, and this is the assertion that says so: every
+    /// figure below is inherited, none of it is written into the catalog entry.
+    func testANewBoardOnKnownSiliconInheritsEverythingFromIt() {
+        let b = BoardModel.core3588e
+        XCTAssertEqual(b.soc, .rk3588, "SoC 的五个常量一个都不用重写")
+        XCTAssertEqual(b.soc.maskromPID, "0x350b")
+        XCTAssertEqual(b.soc.probeChip, "rk3588")
+        XCTAssertTrue(b.supports(.eyescan), "眼图是芯片的属性，不是逐板声明的")
+        XCTAssertEqual(b.chip, "RK3588", "没有特殊标注就取家族名")
+
+        XCTAssertEqual(b.code, "Core3588E")
+        XCTAssertEqual(b.displayName, "Mixtile Core3588E · RK3588", "厂商叫法进界面")
+        XCTAssertNotNil(SafePath.component(b.code),
+                        "code 会成为归档目录名和镜像缓存目录名，必须过得了这一关")
+        XCTAssertEqual(BoardModel.named("core3588e"), b, "命令行按型号名取用时大小写不敏感")
+    }
+
+    /// AZ04A and Core3588E sit on one PID with nothing separating them, and nothing here tries to.
+    func testTwoBoardsCanShareEverythingTheBusCanSee() {
+        XCTAssertEqual(BoardModel.az04a.soc.maskromPID, BoardModel.core3588e.soc.maskromPID)
+        XCTAssertNotEqual(BoardModel.az04a, BoardModel.core3588e, "但它们仍是两个型号")
+    }
+
     // MARK: - Capabilities follow the silicon
 
     func testEyeScanIsAPropertyOfTheChipNotOfOneBoard() {
