@@ -8,6 +8,6 @@ public enum ArchiveRoot {
     public static var `default`: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
-        return docs.appendingPathComponent("AZ0X 物料验证", isDirectory: true)
+        return docs.appendingPathComponent("Rockchip 物料验证", isDirectory: true)
     }
 }

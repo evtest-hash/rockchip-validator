@@ -53,7 +53,7 @@ macOS 上的 Rockchip 平台来料验证工具。将待测板置于 MASKROM 模�
 报告与原始记录按板存放于：
 
 ```
-~/Documents/AZ0X 物料验证/AZ08-DDR-20260826-105228/002-1.4-2207-350E-NA/
+~/Documents/Rockchip 物料验证/AZ08-DDR-20260826-105228/002-1.4-2207-350E-NA/
     …-报告.md      验证报告
     run.json       完整记录
     logs/          板端原始日志
