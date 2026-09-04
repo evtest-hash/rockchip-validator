@@ -42,8 +42,8 @@ public extension RockchipSoC {
     static let rk3576 = RockchipSoC(family: "RK3576", maskromPID: "0x350e", probeChip: "rk3576",
                                     hasEyeScan: true, busBitsPerChannel: 16)
 
-    /// One PID, 0x350b, for every board on this silicon — which is why the OTP marking is the only
-    /// thing that separates them, and why `BoardModel.markings` exists.
+    /// One PID, 0x350b, for every board on this silicon, so the board list cannot tell them apart
+    /// and neither can anything else here: the OTP marking is recorded and decides nothing.
     static let rk3588 = RockchipSoC(family: "RK3588", maskromPID: "0x350b", probeChip: "rk3588",
                                     hasEyeScan: true,
                                     // T02 measures it; there is no fallback here worth asserting.

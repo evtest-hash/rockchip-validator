@@ -50,7 +50,8 @@ public struct Run: Codable {
         /// Derived from the SoC CPUID; the same value before and after flashing.
         public let serial: String?
         public let cpuid: String?
-        /// Separates models the USB PID cannot, such as AZ04A from AZ04B.
+        /// The model marking read out of OTP. Recorded for the report and compared with nothing:
+        /// it used to gate flashing, and boards sharing a SoC are no longer stopped over it.
         public let chipVariant: String?
         /// Bus and port chain: what addressed the board before its serial was known.
         public let socket: String

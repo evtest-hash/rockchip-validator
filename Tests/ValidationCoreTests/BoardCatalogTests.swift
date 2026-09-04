@@ -1,15 +1,11 @@
 import XCTest
 @testable import ValidationCore
 
-/// The catalog, and the two things splitting it out was supposed to buy.
+/// The catalog, and what splitting it out was supposed to buy: a SoC fact is written once.
 ///
-/// One: a SoC fact is written once. `maskromPID` and `probeChip` used to live in per-board
-/// `switch`es that had already merged their RK3588 branches, and every new board on known silicon
-/// was another chance to mistype one of four constants.
-///
-/// Two: a chip marking can name more than one board, and the code that reports one has to say so.
-/// The old `named(byChipVariant:)` returned `allCases.first`, which was right while every marking
-/// named a single board and became a guess presented as fact the moment one did not.
+/// `maskromPID` and `probeChip` used to live in per-board `switch`es that had already merged their
+/// RK3588 branches, and every new board on known silicon was another chance to mistype one of four
+/// constants.
 final class BoardCatalogTests: XCTestCase {
 
     // MARK: - Every entry is usable
@@ -23,8 +19,7 @@ final class BoardCatalogTests: XCTestCase {
             XCTAssertNotNil(RE.first(#"^(0x[0-9a-f]{4})$"#, in: board.soc.maskromPID),
                             "\(board.code) 的 maskrom PID 必须是小写十六进制，"
                           + "工具的 --list 就是那么打印的：\(board.soc.maskromPID)")
-            XCTAssertFalse(board.markings.isEmpty,
-                           "\(board.code) 没有声明 OTP marking，防误刷闸门就无从判断")
+            XCTAssertFalse(board.chip.isEmpty, "\(board.code) 没有可显示的芯片名")
             XCTAssertFalse(board.deviceTreeAliases.isEmpty, "\(board.code) 认不出自己的设备树")
             for alias in board.deviceTreeAliases {
                 XCTAssertEqual(alias, alias.uppercased(),
@@ -51,42 +46,16 @@ final class BoardCatalogTests: XCTestCase {
 
     // MARK: - What the operator reads
 
-    /// `socName` is derived rather than stored, so the rule has to keep producing what the five
-    /// hand-written strings produced. AZ04B is the one that makes it a rule and not a synonym for
-    /// the family name: it is built from RK3588S2, and its report has always said so.
+    /// `chip` defaults to the SoC family, and AZ04B is the row that stops it being a synonym for
+    /// one: it is built from RK3588S2 and its report has always said so.
     func testTheChipNameShownIsWhatItAlwaysWas() {
-        XCTAssertEqual(BoardModel.az05.socName,  "RK3288")
-        XCTAssertEqual(BoardModel.az07.socName,  "RK3566")
-        XCTAssertEqual(BoardModel.az08.socName,  "RK3576")     // spans RK3576/RK3576S → the family
-        XCTAssertEqual(BoardModel.az04a.socName, "RK3588")
-        XCTAssertEqual(BoardModel.az04b.socName, "RK3588S2")   // one marking → that marking
+        XCTAssertEqual(BoardModel.az05.chip,  "RK3288")
+        XCTAssertEqual(BoardModel.az07.chip,  "RK3566")
+        XCTAssertEqual(BoardModel.az08.chip,  "RK3576")
+        XCTAssertEqual(BoardModel.az04a.chip, "RK3588")
+        XCTAssertEqual(BoardModel.az04b.chip, "RK3588S2")   // the one written out
         XCTAssertEqual(BoardModel.az08.displayName, "AZ08 · RK3576")
         XCTAssertEqual(BoardModel.az04b.displayName, "AZ04B · RK3588S2")
-    }
-
-    // MARK: - Markings
-
-    func testAMarkingNamesTheBoardsBuiltFromIt() {
-        XCTAssertEqual(BoardModel.modelsAccepting("RK3576").map(\.code), ["AZ08"])
-        XCTAssertEqual(BoardModel.modelsAccepting("RK3576S").map(\.code), ["AZ08"],
-                       "AZ08 横跨两个 marking，两个都该认")
-        XCTAssertEqual(BoardModel.modelsAccepting("rk3588").map(\.code), ["AZ04A"],
-                       "大小写不该影响 OTP 读数的匹配")
-        XCTAssertTrue(BoardModel.modelsAccepting("RK3399").isEmpty, "没有板子用这颗芯片")
-    }
-
-    /// The gate this refactor must not weaken. Loosening `contradicts` to "no board accepts it
-    /// uniquely" would read as a tidy-up and would quietly stop catching the case it exists for.
-    func testAWrongBoardIsStillCaughtBeforeAnythingIsWrittenToIt() {
-        XCTAssertTrue(BoardModel.az05.contradicts(chipVariant: "RK3588"),
-                      "选了 AZ05 却插了 RK3588 的板 —— 这正是刷机前那道闸门要拦的")
-        XCTAssertFalse(BoardModel.az04a.contradicts(chipVariant: "RK3588"))
-        XCTAssertFalse(BoardModel.az08.contradicts(chipVariant: "RK3576S"),
-                       "同一块板的另一个 marking 不是矛盾")
-        XCTAssertFalse(BoardModel.az05.contradicts(chipVariant: "RK3399"),
-                       "没有任何板子用的 marking 什么也没否证 —— "
-                     + "为一个我们毫无信息的读数拦下一块好板，比不拦更糟")
-        XCTAssertFalse(BoardModel.az05.contradicts(chipVariant: nil))
     }
 
     // MARK: - Capabilities follow the silicon

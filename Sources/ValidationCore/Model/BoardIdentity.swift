@@ -29,8 +29,7 @@ struct BoardIdentity: Equatable {
     /// A device tree containing `AZ08` beside some other `AZ0`-shaped token — `AZ09`, a board that
     /// does not exist — used to come back unidentifiable, because the regex counted both tokens and
     /// saw a conflict. It now reads AZ08: a token no board is built under is not a competing claim,
-    /// it is noise. The same reasoning as `contradicts(chipVariant:)`, which already declines to
-    /// stop a board over a marking it has no information about.
+    /// it is noise.
     static func extractCode(from text: String) -> String? {
         let haystack = text.uppercased()
         let hits = BoardModel.catalog.filter { board in

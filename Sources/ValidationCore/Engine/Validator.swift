@@ -146,21 +146,12 @@ public struct Validator {
                 return run
             }
 
-            // Caught before flashing, not after: writing an image to the wrong part is not undoable.
-            if let variant = state.chipVariant, plan.model.contradicts(chipVariant: variant) {
-                // Never empty: `contradicts` returned true, which is to say some board is built
-                // from this marking. More than one can be — RK3588 is AZ04A and AZ04B alike — and
-                // naming only the first was how a guess got stated as fact.
-                let named = BoardModel.modelsAccepting(variant).map(\.code).joined(separator: " 或 ")
-                state.finish(refusing: "本工位插的是 \(named) 的板子（芯片 \(variant)），"
-                                     + "与所选型号 \(plan.model.code) 不符。"
-                                     + "USB PID 相同，板卡列表分不出来，只能靠芯片 OTP 区分 —— "
-                                     + "请换板子或改所选型号。",
-                             plan: plan, asPrecondition: true)
-                let run = state.run(plan: plan)
-                onEvent(.finished(run))
-                return run
-            }
+            // The OTP marking is recorded and nothing is decided by it. It used to gate flashing:
+            // a board whose marking named a *different* model was refused before anything was
+            // written to it. That gate only ever reached boards sharing a maskrom PID — the board
+            // list and T04 both filter on it, and a PID is a SoC fact — so in practice it separated
+            // one pair on one SoC, and the owner's call is that a same-SoC board is not the
+            // software's to stop. The marking still reaches the report; nobody compares it here.
         } else {
             // Nothing in this sequence happens in maskrom, so there is no OTP read to take the
             // serial from: the board named here is already running our test firmware, and reports

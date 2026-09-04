@@ -239,7 +239,7 @@ struct NewBatchView: View {
             Text("插座 \(device.socket)")
                 .font(.system(.body, design: .monospaced))
             Spacer(minLength: 8)
-            Text(app.model.socName)
+            Text(app.model.chip)
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

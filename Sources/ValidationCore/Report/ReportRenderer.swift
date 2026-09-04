@@ -44,7 +44,7 @@ public struct ReportRenderer {
         let isDDR = flow == .ddr
         var rows: [(String, String)] = []
 
-        rows.append(("被测型号", "\(model.socName)（\(model.code)）"))
+        rows.append(("被测型号", "\(model.chip)（\(model.code)）"))
 
         // Items unsupported by the model never enter the sequence.
         let excluded = TestItem.excluded(for: flow, model: model)
@@ -95,14 +95,10 @@ public struct ReportRenderer {
         rows.append(("镜像", measurement(results, isDDR ? "T04" : "E01", "镜像") ?? "—"))
         // Which board produced this report. The serial is the board's own identity,
         // derived from the cpuid burned into its OTP.
-        if let chipVariant {
-            // Otherwise 被测型号 states the selection and 芯片型号 states the board, and the
-            // two contradict each other with nothing saying which is which.
-            let clash = model.contradicts(chipVariant: chipVariant)
-            rows.append(("芯片型号", clash
-                         ? "\(chipVariant)（与所选型号 \(model.code) 不符）"
-                         : chipVariant))
-        }
+        // Reported as read. It used to be annotated when it named a different model, which was
+        // the report half of a gate that no longer exists — 被测型号 states what was selected and
+        // this states what the chip says, and reconciling the two is the reader's to do.
+        if let chipVariant { rows.append(("芯片型号", chipVariant)) }
         if let serial { rows.append(("板卡序列号", serial)) }
         if let cpuid { rows.append(("芯片 ID", cpuid)) }
         if let boardIdentity { rows.append(("被测设备", boardIdentity)) }
