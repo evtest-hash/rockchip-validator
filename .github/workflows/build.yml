@@ -54,13 +54,13 @@ jobs:
       - name: Build the .app, universal
         env:
           # On a manual run github.ref_name is a branch name, so the stamp falls back to git describe.
-          AZ0X_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          VALIDATOR_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: ./Packaging/build-app.sh
 
       - name: Verify signature, architectures and the declared floor
         run: |
           codesign --verify --deep --strict dist/AZ0XValidator.app
-          lipo -archs dist/AZ0XValidator.app/Contents/MacOS/AZ0XValidator
+          lipo -archs dist/AZ0XValidator.app/Contents/MacOS/RockchipValidator
           plutil -p dist/AZ0XValidator.app/Contents/Info.plist | grep -E 'Version|Minimum'
 
       - name: Build the DMG

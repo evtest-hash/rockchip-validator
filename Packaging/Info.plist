@@ -11,7 +11,7 @@
 	<key>CFBundleIdentifier</key>
 	<string>com.focalcrest.az0x.validator</string>
 	<key>CFBundleExecutable</key>
-	<string>AZ0XValidator</string>
+	<string>RockchipValidator</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<!-- No version keys here on purpose. build-app.sh adds them from git, so the bundle has

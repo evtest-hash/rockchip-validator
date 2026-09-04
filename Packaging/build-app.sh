@@ -10,12 +10,12 @@ CONTENTS="$APP/Contents"
 # Resolved before anything expensive runs: an unversionable tree must fail in a second rather
 # than after a universal build. The version is stamped into the bundle, never into the
 # repository's Info.plist, which carries no version keys at all.
-VERSION="${AZ0X_VERSION:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || true)}"
+VERSION="${VALIDATOR_VERSION:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || true)}"
 if [ -z "$VERSION" ]; then
     # Refusing to package is the point: a bundle whose version cannot be determined would
     # produce reports that name no build, and every report has to be traceable to one.
-    echo "✗ cannot determine a version: git describe failed and AZ0X_VERSION is unset" >&2
-    echo "  pass it explicitly, e.g. AZ0X_VERSION=0.2.0 $0" >&2
+    echo "✗ cannot determine a version: git describe failed and VALIDATOR_VERSION is unset" >&2
+    echo "  pass it explicitly, e.g. VALIDATOR_VERSION=0.2.0 $0" >&2
     exit 1
 fi
 VERSION="${VERSION#v}"
@@ -30,7 +30,7 @@ echo "==> building universal, arm64 and x86_64, release"
 swift build -c release --arch arm64 --arch x86_64 --package-path "$ROOT"
 
 PRODUCTS="$ROOT/.build/apple/Products/Release"
-BIN="$PRODUCTS/AZ0XValidator"
+BIN="$PRODUCTS/RockchipValidator"
 [ -f "$BIN" ] || { echo "✗ product not found: $BIN"; exit 1; }
 
 echo "==> assembling the bundle"
@@ -54,7 +54,7 @@ if [ ! -f "$ROOT/Packaging/AppIcon.icns" ]; then
     "$ROOT/Packaging/make-appicon.sh" | sed 's/^/    /'
 fi
 cp "$ROOT/Packaging/AppIcon.icns" "$CONTENTS/Resources/AppIcon.icns"
-cp "$BIN" "$CONTENTS/MacOS/AZ0XValidator"
+cp "$BIN" "$CONTENTS/MacOS/RockchipValidator"
 
 # SPM resource bundles, which hold the board-side payloads fetched through Bundle.module.
 shopt -s nullglob
@@ -93,11 +93,11 @@ echo "==> ad-hoc signing; internal distribution, no Developer ID notarisation"
 for t in "${TOOLS[@]}"; do
     codesign --force --sign - --timestamp=none "$CONTENTS/Helpers/$t"
 done
-codesign --force --sign - --timestamp=none "$CONTENTS/MacOS/AZ0XValidator"
+codesign --force --sign - --timestamp=none "$CONTENTS/MacOS/RockchipValidator"
 codesign --force --deep --sign - --timestamp=none "$APP"
 
 echo "==> verifying"
-echo "    architectures: $(lipo -archs "$CONTENTS/MacOS/AZ0XValidator")"
+echo "    architectures: $(lipo -archs "$CONTENTS/MacOS/RockchipValidator")"
 echo "    size: $(du -sh "$APP" | cut -f1)"
 codesign -dv "$APP" 2>&1 | grep -E "Identifier|Format" | sed 's/^/    /'
 echo
