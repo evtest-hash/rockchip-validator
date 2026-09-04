@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>AZ0XValidator</string>
+	<string>RockchipValidator</string>
 	<key>CFBundleDisplayName</key>
 	<string>Rockchip 物料验证台</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.focalcrest.az0x.validator</string>
+	<string>com.focalcrest.rockchip.validator</string>
 	<key>CFBundleExecutable</key>
 	<string>RockchipValidator</string>
 	<key>CFBundlePackageType</key>

@@ -1,15 +1,15 @@
 #!/bin/bash
-# Packages dist/AZ0XValidator.app into a DMG for distribution.
+# Packages dist/RockchipValidator.app into a DMG for distribution.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$ROOT/dist/AZ0XValidator.app"
+APP="$ROOT/dist/RockchipValidator.app"
 [ -d "$APP" ] || { echo "✗ run Packaging/build-app.sh first"; exit 1; }
 
 # The version is read from the app itself, which build-app.sh has already stamped.
 VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
         "$APP/Contents/Info.plist")"
-DMG="$ROOT/dist/AZ0XValidator-$VER.dmg"
+DMG="$ROOT/dist/RockchipValidator-$VER.dmg"
 VOL="Rockchip 物料验证 $VER"
 
 STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT

@@ -1,10 +1,10 @@
 #!/bin/bash
-# Assembles AZ0XValidator.app for macOS 13 and later, universal for arm64 and x86_64.
+# Assembles RockchipValidator.app for macOS 13 and later, universal for arm64 and x86_64.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$ROOT/dist"
-APP="$DIST/AZ0XValidator.app"
+APP="$DIST/RockchipValidator.app"
 CONTENTS="$APP/Contents"
 
 # Resolved before anything expensive runs: an unversionable tree must fail in a second rather

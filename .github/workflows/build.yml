@@ -59,9 +59,9 @@ jobs:
 
       - name: Verify signature, architectures and the declared floor
         run: |
-          codesign --verify --deep --strict dist/AZ0XValidator.app
-          lipo -archs dist/AZ0XValidator.app/Contents/MacOS/RockchipValidator
-          plutil -p dist/AZ0XValidator.app/Contents/Info.plist | grep -E 'Version|Minimum'
+          codesign --verify --deep --strict dist/RockchipValidator.app
+          lipo -archs dist/RockchipValidator.app/Contents/MacOS/RockchipValidator
+          plutil -p dist/RockchipValidator.app/Contents/Info.plist | grep -E 'Version|Minimum'
 
       - name: Build the DMG
         run: ./Packaging/make-dmg.sh
@@ -74,14 +74,14 @@ jobs:
         id: ver
         run: |
           echo "v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
-                    dist/AZ0XValidator.app/Contents/Info.plist)" >> "$GITHUB_OUTPUT"
+                    dist/RockchipValidator.app/Contents/Info.plist)" >> "$GITHUB_OUTPUT"
 
       # Actions artifacts are always delivered as a zip, which contains the DMG.
       - name: Upload the DMG as a build artifact, creating no release
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: actions/upload-artifact@v4
         with:
-          name: AZ0XValidator-${{ steps.ver.outputs.v }}
+          name: RockchipValidator-${{ steps.ver.outputs.v }}
           path: dist/*.dmg
           retention-days: 14        # a temporary artifact for bench verification
           if-no-files-found: error
