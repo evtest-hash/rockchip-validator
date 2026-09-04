@@ -8,7 +8,7 @@ import Foundation
 /// logic, the part most worth testing, had no test at all.
 protocol Flasher {
     /// The newest published image for this model, or nil when the channel has none.
-    func latestImage(for model: DeviceModel) async throws -> FlashTool.ImageMeta?
+    func latestImage(for model: BoardModel) async throws -> FlashTool.ImageMeta?
     /// Downloads it, verifying the digest when CI will tell us one.
     func fetch(_ meta: FlashTool.ImageMeta,
                onProgress: ByteProgress?) async throws -> FlashTool.FetchedImage

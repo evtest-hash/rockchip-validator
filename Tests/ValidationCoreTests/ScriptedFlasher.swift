@@ -15,7 +15,7 @@ final class ScriptedFlasher: Flasher, @unchecked Sendable {
 
     private(set) var flashed: [String] = []
 
-    func latestImage(for model: DeviceModel) async throws -> FlashTool.ImageMeta? {
+    func latestImage(for model: BoardModel) async throws -> FlashTool.ImageMeta? {
         if let channelError { throw channelError }
         return meta
     }

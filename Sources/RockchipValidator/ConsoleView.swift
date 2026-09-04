@@ -124,7 +124,7 @@ private struct BatchCard: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Chip(text: batch.model.rawValue, color: .blue)
+            Chip(text: batch.model.code, color: .blue)
             Chip(text: batch.flow.displayName, color: .secondary)
             Text("开始于 \(batch.startedText)")
                 .font(.callout.weight(.semibold))

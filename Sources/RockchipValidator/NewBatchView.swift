@@ -53,7 +53,7 @@ struct NewBatchView: View {
             VStack(spacing: 14) {
                 pickerRow("型号") {
                     Picker("", selection: $app.model) {
-                        ForEach(DeviceModel.allCases) { m in
+                        ForEach(BoardModel.catalog) { m in
                             Text(m.displayName).tag(m)
                         }
                     }
@@ -210,7 +210,7 @@ struct NewBatchView: View {
                     Image(systemName: "cable.connector.slash").foregroundStyle(.secondary)
                     Text(app.isScanning && app.attached.isEmpty
                          ? "正在检测设备"
-                         : "未检测到可用的 \(app.model.rawValue)，请将待测板置于 MASKROM 模式")
+                         : "未检测到可用的 \(app.model.code)，请将待测板置于 MASKROM 模式")
                         .foregroundStyle(.secondary)
                 }
                 .font(.callout)
@@ -239,7 +239,7 @@ struct NewBatchView: View {
             Text("插座 \(device.socket)")
                 .font(.system(.body, design: .monospaced))
             Spacer(minLength: 8)
-            Text(app.model.soc)
+            Text(app.model.socName)
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

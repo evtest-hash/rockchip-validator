@@ -14,7 +14,7 @@ final class AppState: ObservableObject {
     @Published var screen: Screen = .console
 
     // What the wizard is collecting.
-    @Published var model: DeviceModel = .az08 { didSet { resetSelection() } }
+    @Published var model: BoardModel = .az08 { didSet { resetSelection() } }
     @Published var flow: ValidationFlow = .ddr { didSet { resetSelection() } }
     @Published var picked: Set<String> = []
     @Published var burninPhases: Set<BurninPhase> = Set(BurninPhase.allCases)
@@ -176,7 +176,7 @@ final class AppState: ObservableObject {
 
         let stamp = DateFormatter()
         stamp.dateFormat = "yyyyMMdd-HHmmss"
-        let batchID = "\(model.rawValue)-\(flow == .ddr ? "DDR" : "EMMC")-\(stamp.string(from: Date()))"
+        let batchID = "\(model.code)-\(flow == .ddr ? "DDR" : "EMMC")-\(stamp.string(from: Date()))"
         let folder = root.appendingPathComponent(batchID, isDirectory: true)
         let flashes = resolvedItems.contains { TestItem.flashCodes.contains($0.code) }
         let chosen = model, chosenFlow = flow, items = resolvedItems, phases = burninPhases

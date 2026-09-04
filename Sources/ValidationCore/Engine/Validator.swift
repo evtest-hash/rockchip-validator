@@ -4,7 +4,7 @@ import Foundation
 public struct RunPlan {
     public let batchID: String
     public let runID: String
-    public let model: DeviceModel
+    public let model: BoardModel
     public let flow: ValidationFlow
     public let items: [TestItem]
     public let burninPhases: Set<BurninPhase>
@@ -31,7 +31,7 @@ public struct RunPlan {
     public var image: PreparedImage?
 
     public init(batchID: String, runID: String = UUID().uuidString,
-                model: DeviceModel, flow: ValidationFlow,
+                model: BoardModel, flow: ValidationFlow,
                 items: [TestItem], burninPhases: Set<BurninPhase>,
                 deviceID: String, boardSerial: String? = nil,
                 scale: RunScale = .default,
@@ -148,10 +148,14 @@ public struct Validator {
 
             // Caught before flashing, not after: writing an image to the wrong part is not undoable.
             if let variant = state.chipVariant, plan.model.contradicts(chipVariant: variant) {
-                let named = DeviceModel.named(byChipVariant: variant)?.rawValue ?? variant
+                // Never empty: `contradicts` returned true, which is to say some board is built
+                // from this marking. More than one can be — RK3588 is AZ04A and AZ04B alike — and
+                // naming only the first was how a guess got stated as fact.
+                let named = BoardModel.modelsAccepting(variant).map(\.code).joined(separator: " 或 ")
                 state.finish(refusing: "本工位插的是 \(named) 的板子（芯片 \(variant)），"
-                                     + "与所选型号 \(plan.model.rawValue) 不符。"
-                                     + "两者 USB PID 相同，只能靠芯片 OTP 区分 —— 请换板子或改所选型号。",
+                                     + "与所选型号 \(plan.model.code) 不符。"
+                                     + "USB PID 相同，板卡列表分不出来，只能靠芯片 OTP 区分 —— "
+                                     + "请换板子或改所选型号。",
                              plan: plan, asPrecondition: true)
                 let run = state.run(plan: plan)
                 onEvent(.finished(run))

@@ -4,7 +4,7 @@ import Foundation
 struct BoardItems {
 
     let adb: any BoardSession
-    let model: DeviceModel
+    let model: BoardModel
     /// Channel count probed by T01 and bus width per channel probed by T02.
     let channels: Int?
     let busBitsPerChannel: Int?
@@ -63,7 +63,7 @@ struct BoardItems {
         try? await Task.sleep(nanoseconds: 2_000_000_000)
 
         let probe = await adb.sh(
-            "rk-msch-probe -c \(model.probeChip) -f \(topMHz) -d 1000 -t 8", timeout: 90)
+            "rk-msch-probe -c \(model.soc.probeChip) -f \(topMHz) -d 1000 -t 8", timeout: 90)
         _ = await adb.sh("pkill -9 stress-ng 2>/dev/null")
 
         if Adb.isCommandMissing(probe) {
@@ -104,7 +104,7 @@ struct BoardItems {
         }
 
         // Theoretical bandwidth = 2 (double data rate) × frequency in MHz × bus width in bits ÷ 8.
-        if let ch = channels, let bits = busBitsPerChannel ?? model.busBitsPerChannel {
+        if let ch = channels, let bits = busBitsPerChannel ?? model.soc.busBitsPerChannel {
             let totalBits = ch * bits
             let theoretical = 2.0 * Double(topMHz) * Double(totalBits) / 8.0
             r.measurements.append(.num("理论带宽", theoretical.rounded(), "MB/s"))

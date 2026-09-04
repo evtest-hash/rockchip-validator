@@ -44,7 +44,7 @@ public struct ReportRenderer {
         let isDDR = flow == .ddr
         var rows: [(String, String)] = []
 
-        rows.append(("被测型号", "\(model.soc)（\(model.rawValue)）"))
+        rows.append(("被测型号", "\(model.socName)（\(model.code)）"))
 
         // Items unsupported by the model never enter the sequence.
         let excluded = TestItem.excluded(for: flow, model: model)
@@ -100,7 +100,7 @@ public struct ReportRenderer {
             // two contradict each other with nothing saying which is which.
             let clash = model.contradicts(chipVariant: chipVariant)
             rows.append(("芯片型号", clash
-                         ? "\(chipVariant)（与所选型号 \(model.rawValue) 不符）"
+                         ? "\(chipVariant)（与所选型号 \(model.code) 不符）"
                          : chipVariant))
         }
         if let serial { rows.append(("板卡序列号", serial)) }
@@ -136,7 +136,7 @@ public struct ReportRenderer {
     }
 
     /// Items not selected this run: supported by the model but absent from this sequence.
-    static func deselected(flow: ValidationFlow, model: DeviceModel,
+    static func deselected(flow: ValidationFlow, model: BoardModel,
                            items: [TestItem]) -> [TestItem] {
         let ran = Set(items.map(\.code))
         return TestItem.items(for: flow, model: model).filter { !ran.contains($0.code) }

@@ -65,7 +65,7 @@ public enum MaskromScan {
         /// Bus and port chain: the physical position, which is what an operator recognises.
         public var socket: String { DdrCli.socket(deviceID) }
         /// Whether this is a board of that model, as far as the USB id can say.
-        public func matches(_ model: DeviceModel) -> Bool { pid == model.maskromPID }
+        public func matches(_ model: BoardModel) -> Bool { pid == model.soc.maskromPID }
     }
 
     public static func attached() async -> [Board] {
@@ -106,7 +106,7 @@ public extension RunStore {
         public var id: String { folder.path }
         /// When the earliest of its boards started.
         public var startedAt: Date? { runs.compactMap(\.run.startedAt).min() }
-        public var model: DeviceModel? { runs.first?.run.model }
+        public var model: BoardModel? { runs.first?.run.model }
         public var flow: ValidationFlow? { runs.first?.run.flow }
     }
 

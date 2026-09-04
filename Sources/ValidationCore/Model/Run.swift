@@ -21,7 +21,7 @@ public struct Run: Codable {
     public let runID: String
     public let batchID: String
 
-    public let model: DeviceModel
+    public let model: BoardModel
     public let flow: ValidationFlow
     public let board: Board
     public let burninPhases: [BurninPhase]

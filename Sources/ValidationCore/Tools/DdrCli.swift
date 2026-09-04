@@ -31,7 +31,7 @@ struct DdrCli {
         else { return [] }
         return listed.compactMap { entry in
             guard let id = entry.str("deviceID"), let pid = entry.str("pid") else { return nil }
-            // Lower-cased to match `DeviceModel.maskromPID`, which is written that way.
+            // Lower-cased to match `BoardModel.maskromPID`, which is written that way.
             return Device(id: id, pid: pid.lowercased())
         }
     }

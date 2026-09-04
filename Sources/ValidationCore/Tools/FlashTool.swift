@@ -56,7 +56,7 @@ struct FlashTool {
     // MARK: - Image retrieval
 
     /// Queries the latest image for a model, matching exactly on board and taking the latest date.
-    func latestImage(for model: DeviceModel) async throws -> ImageMeta? {
+    func latestImage(for model: BoardModel) async throws -> ImageMeta? {
         var request = URLRequest(url: Self.indexURL)
         request.timeoutInterval = 30
         let (data, _) = try await URLSession.shared.data(for: request)
@@ -64,14 +64,14 @@ struct FlashTool {
         else { return nil }
 
         let candidates = list.compactMap { entry -> ImageMeta? in
-            guard entry.str("board") == model.rawValue,
+            guard entry.str("board") == model.code,
                   let url = entry.str("url"), !url.isEmpty,
                   let asset = entry.str("asset")
             else { return nil }
             return ImageMeta(asset: asset, url: url,
                              size: entry.int("size") ?? -1,
                              date: entry.str("date") ?? "",
-                             board: model.rawValue,
+                             board: model.code,
                              tag: entry.str("tag") ?? "")
         }
         return candidates.sorted { $0.date > $1.date }.first

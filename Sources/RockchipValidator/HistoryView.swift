@@ -71,7 +71,7 @@ private struct BatchRow: View {
                 Text(batch.startedAt.map { operatorStamp.string(from: $0) } ?? batch.batchID)
                     .font(.callout.monospacedDigit())
                 if let m = batch.model, let f = batch.flow {
-                    Chip(text: m.rawValue, color: .blue)
+                    Chip(text: m.code, color: .blue)
                     Chip(text: f.displayName, color: .secondary)
                 }
                 Text(batch.runs.count > 1 ? "\(batch.runs.count) 块板" : "1 块板")

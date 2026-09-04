@@ -21,7 +21,7 @@ final class Bench: ObservableObject, Identifiable {
     let deviceID: String
     /// What to run on it. Handed to the core, which runs exactly one board.
     let plan: RunPlan
-    let model: DeviceModel
+    let model: BoardModel
     let flow: ValidationFlow
     let items: [TestItem]
 
@@ -184,7 +184,7 @@ final class Batch: ObservableObject, Identifiable {
 
     let id = UUID()
     let batchID: String
-    let model: DeviceModel
+    let model: BoardModel
     let flow: ValidationFlow
     let items: [TestItem]
     let burninPhases: Set<BurninPhase>
@@ -195,7 +195,7 @@ final class Batch: ObservableObject, Identifiable {
     let startedText: String
     @Published var benches: [Bench]
 
-    init(batchID: String, model: DeviceModel, flow: ValidationFlow, items: [TestItem],
+    init(batchID: String, model: BoardModel, flow: ValidationFlow, items: [TestItem],
          burninPhases: Set<BurninPhase>, deviceIDs: [String], folder: URL?,
          scale: RunScale = .default, image: PreparedImage? = nil) {
         self.batchID = batchID

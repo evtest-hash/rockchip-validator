@@ -31,13 +31,13 @@ public enum ImageSupply {
 
     public enum Failure: LocalizedError {
         case toolMissing
-        case noImage(DeviceModel)
+        case noImage(BoardModel)
         case channel(String)
 
         public var errorDescription: String? {
             switch self {
             case .toolMissing:      return "应用安装不完整，缺少刷机组件，请重新安装"
-            case let .noImage(m):   return "未找到 \(m.rawValue) 的镜像"
+            case let .noImage(m):   return "未找到 \(m.code) 的镜像"
             case let .channel(why): return why
             }
         }
@@ -50,7 +50,7 @@ public enum ImageSupply {
     /// `onAsset` fires once CI has named the build, which is before a single byte moves. The two
     /// halves of this step look different to whoever is waiting: asking CI has no byte count to
     /// show, and the transfer has nothing to name until the asking is done.
-    public static func prepare(model: DeviceModel,
+    public static func prepare(model: BoardModel,
                                onAsset: ((String) -> Void)? = nil,
                                onProgress: ByteProgress? = nil) async throws -> PreparedImage {
         guard let tool = FlashTool() else { throw Failure.toolMissing }
@@ -59,7 +59,7 @@ public enum ImageSupply {
     }
 
     /// The injectable form, so the whole path is reachable without a network.
-    static func prepare(model: DeviceModel, using tool: any Flasher,
+    static func prepare(model: BoardModel, using tool: any Flasher,
                         onAsset: ((String) -> Void)? = nil,
                         onProgress: ByteProgress? = nil) async throws -> PreparedImage {
         let meta: FlashTool.ImageMeta?

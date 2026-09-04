@@ -103,7 +103,7 @@ public extension TestItem {
     ]
 
     /// The items that actually exist for a model in a flow.
-    static func items(for flow: ValidationFlow, model: DeviceModel) -> [TestItem] {
+    static func items(for flow: ValidationFlow, model: BoardModel) -> [TestItem] {
         all(for: flow).filter { supports($0, model: model) }
     }
 
@@ -112,13 +112,13 @@ public extension TestItem {
         flow == .ddr ? ddrItems : emmcItems
     }
 
-    static func supports(_ item: TestItem, model: DeviceModel) -> Bool {
+    static func supports(_ item: TestItem, model: BoardModel) -> Bool {
         guard let need = item.requires else { return true }
         return model.supports(need)
     }
 
     /// Items excluded for this model, used by the report to generate the sequence-scope note.
-    static func excluded(for flow: ValidationFlow, model: DeviceModel) -> [TestItem] {
+    static func excluded(for flow: ValidationFlow, model: BoardModel) -> [TestItem] {
         all(for: flow).filter { !supports($0, model: model) }
     }
 
@@ -129,7 +129,7 @@ public extension TestItem {
     /// Flashing locks as soon as an on-board item is selected: those items run on the firmware this
     /// project builds, and flashing is what makes the addressing premise hold.
     static func isLocked(_ item: TestItem, picked: Set<String>,
-                         flow: ValidationFlow, model: DeviceModel) -> Bool {
+                         flow: ValidationFlow, model: BoardModel) -> Bool {
         if !item.isOptional { return true }
         guard flashCodes.contains(item.code) else { return false }
         return items(for: flow, model: model).contains {
@@ -140,7 +140,7 @@ public extension TestItem {
     /// The sequence to execute: locked items plus the selected ones, in flow order.
     static func resolveSelection(_ picked: Set<String>,
                                  flow: ValidationFlow,
-                                 model: DeviceModel) -> [TestItem] {
+                                 model: BoardModel) -> [TestItem] {
         let available = items(for: flow, model: model)
         return available.filter { item in
             // An implied item follows the selection state of the item that implies it.
@@ -152,7 +152,7 @@ public extension TestItem {
     }
 
     /// Items the operator may select for this flow and model.
-    static func optionalItems(for flow: ValidationFlow, model: DeviceModel) -> [TestItem] {
+    static func optionalItems(for flow: ValidationFlow, model: BoardModel) -> [TestItem] {
         items(for: flow, model: model).filter { $0.isOptional && $0.impliedBy == nil }
     }
 

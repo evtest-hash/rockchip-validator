@@ -11,17 +11,33 @@ struct BoardIdentity: Equatable {
     let uname: String
     let serial: String
 
-    /// The AZ0X model code extracted from the device tree.
+    /// The board code extracted from the device tree.
     var code: String? { Self.extractCode(from: model + " " + compatible) }
 
-    /// The rule must tolerate three inconsistencies observed across five real device trees.
+    /// Which catalog entry this device tree names.
+    ///
+    /// This used to be a regex, `(AZ0\d[AB]?)`, which is a rule about one product line's naming
+    /// scheme rather than about what this bench validates. It cannot see a board called anything
+    /// else, and no amount of adding catalog entries would have taught it to. Matching each board's
+    /// declared aliases asks the catalog instead, so a board is identifiable exactly when it is
+    /// known — which is the question being asked.
+    ///
+    /// Two or more entries matching is reported as unidentifiable rather than resolved by picking
+    /// one, as before: a device tree naming two boards has told us nothing we can act on.
+    ///
+    /// One edge case does answer differently now, and it is worth stating rather than discovering.
+    /// A device tree containing `AZ08` beside some other `AZ0`-shaped token — `AZ09`, a board that
+    /// does not exist — used to come back unidentifiable, because the regex counted both tokens and
+    /// saw a conflict. It now reads AZ08: a token no board is built under is not a competing claim,
+    /// it is noise. The same reasoning as `contradicts(chipVariant:)`, which already declines to
+    /// stop a board over a marking it has no information about.
     static func extractCode(from text: String) -> String? {
-        // Upper-case the whole text to absorb the case inconsistency.
-        let found = Set(RE.all(#"(AZ0\d[AB]?)"#, in: text.uppercased()))
-        // Conflicting codes are reported as unidentifiable rather than resolved by picking one.
-        guard found.count == 1, let code = found.first,
-              DeviceModel(rawValue: code) != nil else { return nil }
-        return code
+        let haystack = text.uppercased()
+        let hits = BoardModel.catalog.filter { board in
+            board.deviceTreeAliases.contains { haystack.contains($0) }
+        }
+        guard hits.count == 1 else { return nil }
+        return hits[0].code
     }
 
     /// The "device under test" row of the report.
@@ -32,7 +48,7 @@ struct BoardIdentity: Equatable {
     }
 }
 
-extension DeviceModel {
+extension BoardModel {
 
     /// Result of the identity check.
     enum IdentityCheck: Equatable {
@@ -45,7 +61,7 @@ extension DeviceModel {
 
     /// Whether the identity reported by the board is the model selected for this run.
     func check(_ identity: BoardIdentity) -> IdentityCheck {
-        guard let code = identity.code else { return .unidentifiable }
-        return code == rawValue ? .matched : .mismatched(actual: code)
+        guard let reported = identity.code else { return .unidentifiable }
+        return reported == code ? .matched : .mismatched(actual: reported)
     }
 }

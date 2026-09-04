@@ -108,7 +108,7 @@ enum CLI {
     /// of these and nothing here can see across processes. Which boards to use is the caller's to
     /// decide — this only saves typing the device ids out of thin air.
     private static func listDevices(_ o: Options) async -> Int32 {
-        let model = o.string("model").flatMap { DeviceModel(rawValue: $0.uppercased()) }
+        let model = o.string("model").flatMap { BoardModel.named($0) }
         let devices = await MaskromScan.attached()
         guard !devices.isEmpty else {
             print("当前没有处于 maskrom 的板卡。")
@@ -126,8 +126,8 @@ enum CLI {
 
     private static func runValidation(_ o: Options) async -> Int32 {
         guard let modelName = o.string("model"),
-              let model = DeviceModel(rawValue: modelName.uppercased())
-        else { return fail("--model 必填，取值：" + DeviceModel.allCases.map(\.rawValue).joined(separator: "、")) }
+              let model = BoardModel.named(modelName)
+        else { return fail("--model 必填，取值：" + BoardModel.catalog.map(\.code).joined(separator: "、")) }
 
         let flow: ValidationFlow = (o.string("flow") ?? "ddr").lowercased() == "emmc" ? .emmc : .ddr
 
@@ -181,7 +181,7 @@ enum CLI {
         let stamp = DateFormatter()
         stamp.dateFormat = "yyyyMMdd-HHmmss"
         let batchID = o.string("batch")
-            ?? "\(model.rawValue)-\(flow == .ddr ? "DDR" : "EMMC")-\(stamp.string(from: Date()))"
+            ?? "\(model.code)-\(flow == .ddr ? "DDR" : "EMMC")-\(stamp.string(from: Date()))"
 
         var plan = RunPlan(batchID: batchID, model: model, flow: flow, items: items,
                            burninPhases: Set(BurninPhase.allCases),
