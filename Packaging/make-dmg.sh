@@ -10,7 +10,7 @@ APP="$ROOT/dist/AZ0XValidator.app"
 VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
         "$APP/Contents/Info.plist")"
 DMG="$ROOT/dist/AZ0XValidator-$VER.dmg"
-VOL="AZ0X 物料验证 $VER"
+VOL="Rockchip 物料验证 $VER"
 
 STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT
 cp -R "$APP" "$STAGE/"

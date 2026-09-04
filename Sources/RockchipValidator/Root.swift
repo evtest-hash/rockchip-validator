@@ -40,7 +40,7 @@ struct RockchipValidatorApp: App {
     @StateObject private var app = AppState()
 
     var body: some Scene {
-        WindowGroup("AZ0X 物料验证台") {
+        WindowGroup("Rockchip 物料验证台") {
             RootView().environmentObject(app)
         }
         .defaultSize(width: 1200, height: 800)

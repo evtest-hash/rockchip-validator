@@ -21,7 +21,7 @@ public struct ReportRenderer {
         // standard, 初步报告 otherwise — which only worked because the software held an opinion
         // about the right amount. It no longer does: a run is judged against what it was asked to
         // do, so every run produces the same document, and 本次范围 below says what was asked.
-        out.append("# AZ0X 系列 \(isDDR ? "DDR" : "eMMC") 物料验证报告")
+        out.append("# Rockchip \(isDDR ? "DDR" : "eMMC") 物料验证报告")
         out.append("")
         out += headerTable(run)
         out.append("")

@@ -35,7 +35,7 @@ enum CLI {
     }
 
     private static let usage = """
-        rkval —— AZ0X 物料验证执行台（一次一块板）
+        rkval —— Rockchip 物料验证执行台（一次一块板）
 
         这是联机调试用的入口。操作员用界面做验证；多块板同时跑由界面安排。
 

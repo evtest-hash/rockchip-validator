@@ -5,7 +5,7 @@
 	<key>CFBundleName</key>
 	<string>AZ0XValidator</string>
 	<key>CFBundleDisplayName</key>
-	<string>AZ0X 物料验证台</string>
+	<string>Rockchip 物料验证台</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>

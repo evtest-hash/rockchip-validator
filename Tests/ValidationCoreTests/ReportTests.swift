@@ -71,7 +71,7 @@ final class ReportTests: XCTestCase {
         XCTAssertTrue(md.contains("eMMC 拷机 1 次全盘写"), "量要写出来：\n\(md)")
         XCTAssertFalse(md.contains("1 / 20"), "不写对照 —— 对照就是那个被删掉的预设标准")
         XCTAssertFalse(md.contains("抽测"), "跑得少不是抽测，是一次小一点的验证")
-        XCTAssertTrue(md.contains("# AZ0X 系列 eMMC 物料验证报告"), "只有一种标题：\n\(md)")
+        XCTAssertTrue(md.contains("# Rockchip eMMC 物料验证报告"), "只有一种标题：\n\(md)")
     }
 
     /// A large run and a small one produce the same document in the same form.
@@ -89,7 +89,7 @@ final class ReportTests: XCTestCase {
         XCTAssertTrue(a.contains("项全部通过"), "判据是本次的量，跑满了就是通过，不打折：\n\(a)")
         XCTAssertTrue(b.contains("休眠唤醒 5000 次") && b.contains("重启 5000 次"), b)
         for md in [a, b] {
-            XCTAssertTrue(md.contains("# AZ0X 系列 DDR 物料验证报告"), "只有一种标题：\n\(md)")
+            XCTAssertTrue(md.contains("# Rockchip DDR 物料验证报告"), "只有一种标题：\n\(md)")
             XCTAssertFalse(md.contains("抽测"), md)
         }
     }
