@@ -20,11 +20,6 @@ final class BoardCatalogTests: XCTestCase {
                             "\(board.code) 的 maskrom PID 必须是小写十六进制，"
                           + "工具的 --list 就是那么打印的：\(board.soc.maskromPID)")
             XCTAssertFalse(board.chip.isEmpty, "\(board.code) 没有可显示的芯片名")
-            XCTAssertFalse(board.deviceTreeAliases.isEmpty, "\(board.code) 认不出自己的设备树")
-            for alias in board.deviceTreeAliases {
-                XCTAssertEqual(alias, alias.uppercased(),
-                               "\(board.code) 的别名 \(alias) 不是大写；比对前文本已被 uppercased")
-            }
         }
     }
 

@@ -27,19 +27,13 @@ public struct BoardModel: Identifiable {
     /// said so, where the family name would be true but less so.
     public let chip: String
 
-    /// Upper-case fragments this board's device tree is expected to contain. Defaults to the code,
-    /// which is what every board here spells; the field exists for one that spells something else.
-    public let deviceTreeAliases: [String]
-
     public var id: String { code }
 
-    public init(code: String, name: String? = nil, soc: RockchipSoC,
-                chip: String? = nil, deviceTreeAliases: [String]? = nil) {
+    public init(code: String, name: String? = nil, soc: RockchipSoC, chip: String? = nil) {
         self.code = code
         self.name = name ?? code
         self.soc = soc
         self.chip = chip ?? soc.family
-        self.deviceTreeAliases = deviceTreeAliases ?? [code.uppercased()]
     }
 }
 

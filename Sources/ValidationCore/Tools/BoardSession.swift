@@ -74,17 +74,14 @@ extension BoardSession {
         await int("cut -d. -f1 /proc/uptime")
     }
 
-    /// Reads the identity the board reports about itself in one round trip.
+    /// Reads what the board says it is.
+    ///
+    /// One node. It used to read `compatible` and `uname -n` alongside it: `compatible` fed the
+    /// device-tree code extraction that is gone, and `uname -n` had no reader at all — every run
+    /// asked a board for it and threw the answer away.
     func identity() async -> BoardIdentity {
-        let raw = await line(
-            "printf '%s\\n' \"$(tr -d '\\0' < /proc/device-tree/model 2>/dev/null)\" "
-          + "\"$(tr '\\0' ' ' < /proc/device-tree/compatible 2>/dev/null)\" "
-          + "\"$(uname -n)\"")
-        let parts = raw.components(separatedBy: .newlines)
-        func at(_ i: Int) -> String {
-            i < parts.count ? parts[i].trimmingCharacters(in: .whitespaces) : ""
-        }
-        return BoardIdentity(model: at(0), compatible: at(1), uname: at(2), serial: serial)
+        let model = await line("tr -d '\\0' < /proc/device-tree/model 2>/dev/null")
+        return BoardIdentity(model: model, serial: serial)
     }
 
     func writeFile(_ content: String, to path: String) async -> Bool {
