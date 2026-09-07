@@ -5,7 +5,11 @@ import ValidationCore
 /// Top-level view, switching on the current screen.
 struct RootView: View {
     @EnvironmentObject var app: AppState
-    @Environment(\.quitGuard) private var quitGuard
+    /// Passed in rather than reached for through the environment: an `EnvironmentKey` needs a
+    /// `defaultValue`, and the only sane one is a second `QuitGuard` that is never installed on
+    /// `NSApp` — so a `RootView` built without the modifier would assign its state to an orphan
+    /// and lose the guard silently, which is the failure the wiring test exists to catch.
+    let quitGuard: QuitGuard
 
     var body: some View {
         Group {
@@ -40,18 +44,6 @@ struct RootView: View {
     }
 }
 
-/// Carries the delegate down to the one view that can wire it up.
-private struct QuitGuardKey: EnvironmentKey {
-    @MainActor static let defaultValue = QuitGuard()
-}
-
-extension EnvironmentValues {
-    var quitGuard: QuitGuard {
-        get { self[QuitGuardKey.self] }
-        set { self[QuitGuardKey.self] = newValue }
-    }
-}
-
 @main
 struct RockchipValidatorApp: App {
     @StateObject private var app = AppState()
@@ -59,9 +51,7 @@ struct RockchipValidatorApp: App {
 
     var body: some Scene {
         WindowGroup("Rockchip 物料验证台") {
-            RootView()
-                .environmentObject(app)
-                .environment(\.quitGuard, quitGuard)
+            RootView(quitGuard: quitGuard).environmentObject(app)
         }
         .defaultSize(width: 1200, height: 800)
         .windowResizability(.contentMinSize)

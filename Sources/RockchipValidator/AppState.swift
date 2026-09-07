@@ -278,6 +278,6 @@ final class AppState: ObservableObject {
         // This bench is already marked finished — the event stream ended above — so the others'
         // state is all that is left to read. A board that was refused before it started counts as
         // finished too: it is done, and something has to be done about it.
-        if batch.benches.allSatisfy(\.isFinished) { dock.batchFinished() }
+        if !batch.isRunning { dock.batchFinished() }
     }
 }

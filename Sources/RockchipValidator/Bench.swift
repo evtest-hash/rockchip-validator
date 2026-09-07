@@ -118,16 +118,21 @@ final class Bench: ObservableObject, Identifiable {
 
     /// Whether this board is still being validated.
     ///
-    /// One predicate, because two consumers ask it and they must not drift: the console counts
-    /// boards still working, and the quit guard decides whether Cmd+Q costs anything. `refuse(_:)`
-    /// marks a bench finished, so a board that never started is not running either.
-    var isRunning: Bool { ending == .running }
+    /// One predicate, because three places ask it and they must not drift: the console's running
+    /// count, the Dock's "this batch is done", and the quit guard deciding whether Cmd+Q costs
+    /// anything. `refuse(_:)` marks a bench finished, so a board that never started is not running.
+    ///
+    /// Not derived from `ending`. That is a presentation type — it lives beside `ItemDisplayState`
+    /// and carries Chinese titles — and every other reader of it is a view. Basing the cheapest
+    /// lifecycle predicate on a display enum's case list points the dependency the wrong way:
+    /// `cee62d6` removed a case from `Ending`, and would have been removing it from under this.
+    var isRunning: Bool { !isFinished }
 
     /// Where the run got to. A manual stop and a defect are never merged: one is the operator's
     /// action, the other a statement about the board.
     var ending: Ending {
         if let refusedWhy { return .noResult(refusedWhy) }
-        guard isFinished else { return .running }
+        guard !isRunning else { return .running }
         if let stopped = run?.stoppedAt {
             return results[stopped]?.condemnsMaterial == true ? .failed(stopped)
                                                               : .noResult(stopped)
@@ -227,7 +232,6 @@ final class Batch: ObservableObject, Identifiable {
     }
 
     var finishedCount: Int { benches.filter(\.isFinished).count }
-    var runningCount: Int { benches.filter(\.isRunning).count }
-    var isRunning: Bool { runningCount > 0 }
+    var isRunning: Bool { benches.contains(where: \.isRunning) }
 
 }

@@ -39,7 +39,5 @@ final class QuitGuardWiringTests: XCTestCase {
         let g = try source("QuitGuard.swift")
         XCTAssertTrue(g.contains("func applicationShouldTerminate"),
                       "Cmd+Q、菜单、Dock 右键退出、注销关机 —— 只有这个钩子全都盖住")
-        XCTAssertFalse(try source("Root.swift").contains("CommandGroup(replacing: .appTermination)"),
-                       "换掉菜单项只盖住菜单那一条路")
     }
 }

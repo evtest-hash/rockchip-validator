@@ -83,7 +83,7 @@ private struct OverviewStrip: View {
         }
     }
 
-    private var running: Int { benches.filter { !$0.isFinished }.count }
+    private var running: Int { benches.filter(\.isRunning).count }
 
     /// Ran but produced no conclusion: our environment, a precondition, or nothing arrived in
     /// time. These are the ones worth investigating, possibly re-running. A board that produced a
