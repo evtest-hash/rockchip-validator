@@ -116,6 +116,13 @@ final class Bench: ObservableObject, Identifiable {
         items.filter { results[$0.code].flatMap(Conclusion.of) == .recordOnly }
     }
 
+    /// Whether this board is still being validated.
+    ///
+    /// One predicate, because two consumers ask it and they must not drift: the console counts
+    /// boards still working, and the quit guard decides whether Cmd+Q costs anything. `refuse(_:)`
+    /// marks a bench finished, so a board that never started is not running either.
+    var isRunning: Bool { ending == .running }
+
     /// Where the run got to. A manual stop and a defect are never merged: one is the operator's
     /// action, the other a statement about the board.
     var ending: Ending {
@@ -220,7 +227,7 @@ final class Batch: ObservableObject, Identifiable {
     }
 
     var finishedCount: Int { benches.filter(\.isFinished).count }
-    var runningCount: Int { benches.filter { !$0.isFinished }.count }
+    var runningCount: Int { benches.filter(\.isRunning).count }
     var isRunning: Bool { runningCount > 0 }
 
 }
