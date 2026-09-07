@@ -135,13 +135,13 @@ final class AppState: ObservableObject {
     /// A board already in use is simply absent — not listed and refused, which would only invite the
     /// operator to tick something that cannot be taken.
     var candidates: [MaskromScan.Board] {
-        attached.filter { $0.matches(model) && !inUse.contains($0.deviceID) }
+        attached.filter { $0.matches(model.soc) && !inUse.contains($0.deviceID) }
     }
 
     /// Boards left out, counted from the same values the list above filters on, so the explanation
     /// cannot describe a different set than the rows beside it.
     var excludedCounts: (claimed: Int, otherModel: Int) {
-        let mine = attached.filter { $0.matches(model) }
+        let mine = attached.filter { $0.matches(model.soc) }
         return (mine.filter { inUse.contains($0.deviceID) }.count, attached.count - mine.count)
     }
 

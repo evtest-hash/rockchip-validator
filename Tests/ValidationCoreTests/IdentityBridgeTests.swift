@@ -59,9 +59,8 @@ final class IdentityBridgeTests: XCTestCase {
     /// Unreadable OTP with board items in the sequence: refused before a board is written to.
     ///
     /// It used to flash anyway and only notice at the first board item, which cost a write and left
-    /// the whole board-side half 未得结果. The gate beside it — the chip variant contradicting the
-    /// selected model — already worked this way, for the reason its comment gives: writing an image
-    /// is not undoable.
+    /// the whole board-side half 未得结果. The reason it is caught here rather than there stands on
+    /// its own: writing an image is not undoable.
     func testAnUnreadableOtpStopsTheRunBeforeItFlashes() async {
         let flasher = ScriptedFlasher()
         let v = Validator(plan: plan(TestItem.ddrItems), tool: tool(serial: nil),

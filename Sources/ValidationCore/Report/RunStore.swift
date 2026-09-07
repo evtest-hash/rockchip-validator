@@ -64,8 +64,10 @@ public enum MaskromScan {
         public var id: String { deviceID }
         /// Bus and port chain: the physical position, which is what an operator recognises.
         public var socket: String { DdrCli.socket(deviceID) }
-        /// Whether this is a board of that model, as far as the USB id can say.
-        public func matches(_ model: BoardModel) -> Bool { pid == model.soc.maskromPID }
+        /// Whether this is a board on that silicon. A PID is a SoC fact and cannot say more —
+        /// every board on one SoC shares it — so the parameter is the SoC, and the call sites read
+        /// as the coarse filter this is rather than as a model filter.
+        public func matches(_ soc: RockchipSoC) -> Bool { pid == soc.maskromPID }
     }
 
     public static func attached() async -> [Board] {

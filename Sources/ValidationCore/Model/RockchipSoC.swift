@@ -19,9 +19,13 @@ public struct RockchipSoC: Hashable {
     /// Value for the `-c` argument of rk-msch-probe.
     public let probeChip: String
 
-    /// Whether the DDR tool can scan DQ eye diagrams on this silicon. T03 requires it, and an item
-    /// requiring a capability the SoC lacks never enters the sequence.
-    public let hasEyeScan: Bool
+    /// What this silicon can do that an item may require. An item requiring a capability the SoC
+    /// lacks never enters the sequence.
+    ///
+    /// A set rather than a `Bool` per capability: those needed a stored flag here *and* an arm in
+    /// `BoardModel.supports` translating one to the other, so a SoC-level fact was written in three
+    /// places — the shape this split exists to remove. No default, so a new SoC row has to decide.
+    public let capabilities: Set<Capability>
 
     /// Bus width per channel, used only to compute the theoretical bandwidth for T05.
     /// nil means T02 has to supply it, or the theoretical figure is left out of the report.
@@ -32,20 +36,20 @@ public extension RockchipSoC {
 
     static let rk3288 = RockchipSoC(family: "RK3288", maskromPID: "0x320a", probeChip: "rk3288",
                                     // No DQ eye scan on this one.
-                                    hasEyeScan: false,
+                                    capabilities: [],
                                     // Two 32-bit channels.
                                     busBitsPerChannel: 32)
 
     static let rk3566 = RockchipSoC(family: "RK3566", maskromPID: "0x350a", probeChip: "rk356x",
-                                    hasEyeScan: true, busBitsPerChannel: 32)
+                                    capabilities: [.eyescan], busBitsPerChannel: 32)
 
     static let rk3576 = RockchipSoC(family: "RK3576", maskromPID: "0x350e", probeChip: "rk3576",
-                                    hasEyeScan: true, busBitsPerChannel: 16)
+                                    capabilities: [.eyescan], busBitsPerChannel: 16)
 
     /// One PID, 0x350b, for every board on this silicon, so the board list cannot tell them apart
     /// and neither can anything else here: the OTP marking is recorded and decides nothing.
     static let rk3588 = RockchipSoC(family: "RK3588", maskromPID: "0x350b", probeChip: "rk3588",
-                                    hasEyeScan: true,
+                                    capabilities: [.eyescan],
                                     // T02 measures it; there is no fallback here worth asserting.
                                     busBitsPerChannel: nil)
 }

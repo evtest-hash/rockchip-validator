@@ -9,7 +9,7 @@ import XCTest
 final class MaskromItemTests: XCTestCase {
 
     private func items(_ tool: ScriptedMaskromTool) -> MaskromItems {
-        MaskromItems(cli: tool, model: .az08, deviceID: "002-1.4-2207-350e-NA")
+        MaskromItems(cli: tool, soc: .rk3576, deviceID: "002-1.4-2207-350e-NA")
     }
 
     private func detect(_ answer: ScriptedMaskromTool.Answer) -> ScriptedMaskromTool {

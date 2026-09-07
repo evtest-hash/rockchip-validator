@@ -10,7 +10,7 @@ import Foundation
 struct MaskromItems {
 
     let cli: any MaskromTool
-    let model: BoardModel
+    let soc: RockchipSoC
     /// The board this instance addresses, fixed for its life.
     let deviceID: String
 
@@ -238,15 +238,15 @@ struct MaskromItems {
             r.conclude()
             return r
         }
-        guard target.pid == model.soc.maskromPID else {
+        guard target.pid == soc.maskromPID else {
             r.validity = [.isTrue("防误刷 · 型号相符", false,
-                                  expected: "PID \(model.soc.maskromPID)，实际 \(target.pid)")]
+                                  expected: "PID \(soc.maskromPID)，实际 \(target.pid)")]
             r.conclude()
             return r
         }
         r.validity = [
             .isTrue("防误刷 · 目标设备在位", true, expected: deviceID),
-            .isTrue("防误刷 · 型号相符", true, expected: "PID \(model.soc.maskromPID)"),
+            .isTrue("防误刷 · 型号相符", true, expected: "PID \(soc.maskromPID)"),
         ]
 
         r.measurements.append(.text("镜像", image.asset))

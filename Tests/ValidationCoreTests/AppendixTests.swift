@@ -59,7 +59,7 @@ final class AppendixTests: XCTestCase {
         board.files["/userdata/az0x-ddr/t07_suspend/progress.log"] =
             (1...30).map { "\(1000 + $0 * 16) cycle \($0) rc=0 fail=0" }
                 .joined(separator: "\n") + "\n1500 SUSPEND_SUCCESS end=30\n1501 ALLDONE 30"
-        let items = BoardItems(adb: board, model: .az08, channels: 4,
+        let items = BoardItems(adb: board, soc: .rk3576, channels: 4,
                                busBitsPerChannel: 16, clock: clock)
 
         let r = await items.runT07(targetCycles: 30)
@@ -79,7 +79,7 @@ final class AppendixTests: XCTestCase {
             "1000 SUSPEND_SUCCESS start=0\n1017 cycle 1 rc=0 fail=0"
         var checks = 0
         board.online = { checks += 1; return checks <= 6 }
-        let items = BoardItems(adb: board, model: .az08, channels: 4,
+        let items = BoardItems(adb: board, soc: .rk3576, channels: 4,
                                busBitsPerChannel: 16, clock: clock)
 
         let r = await items.runT07(targetCycles: 3_000)

@@ -31,12 +31,14 @@ final class BoardCatalogTests: XCTestCase {
     }
 
     /// The split's whole point, asserted rather than described: two boards on one SoC read the same
-    /// four constants from one place.
+    /// constants from one place.
+    ///
+    /// One equality covers every field, `RockchipSoC` being a `Hashable` struct — restating the
+    /// PID and the probe chip afterwards adds lines that cannot fail on their own, and invites one
+    /// more each time the SoC grows a field. The literal is pinned once, here.
     func testTwoBoardsOnOneSoCShareItsFacts() {
         XCTAssertEqual(BoardModel.az04a.soc, BoardModel.az04b.soc)
         XCTAssertEqual(BoardModel.az04a.soc.maskromPID, "0x350b")
-        XCTAssertEqual(BoardModel.az04b.soc.maskromPID, "0x350b")
-        XCTAssertEqual(BoardModel.az04a.soc.probeChip, BoardModel.az04b.soc.probeChip)
     }
 
     // MARK: - What the operator reads
@@ -57,10 +59,7 @@ final class BoardCatalogTests: XCTestCase {
     /// figure below is inherited, none of it is written into the catalog entry.
     func testANewBoardOnKnownSiliconInheritsEverythingFromIt() {
         let b = BoardModel.core3588e
-        XCTAssertEqual(b.soc, .rk3588, "SoC 的五个常量一个都不用重写")
-        XCTAssertEqual(b.soc.maskromPID, "0x350b")
-        XCTAssertEqual(b.soc.probeChip, "rk3588")
-        XCTAssertTrue(b.supports(.eyescan), "眼图是芯片的属性，不是逐板声明的")
+        XCTAssertEqual(b.soc, .rk3588, "SoC 的常量一个都不用重写 —— 一次相等就覆盖全部字段")
         XCTAssertEqual(b.chip, "RK3588", "没有特殊标注就取家族名")
 
         XCTAssertEqual(b.code, "Core3588E")
@@ -72,7 +71,7 @@ final class BoardCatalogTests: XCTestCase {
 
     /// AZ04A and Core3588E sit on one PID with nothing separating them, and nothing here tries to.
     func testTwoBoardsCanShareEverythingTheBusCanSee() {
-        XCTAssertEqual(BoardModel.az04a.soc.maskromPID, BoardModel.core3588e.soc.maskromPID)
+        XCTAssertEqual(BoardModel.az04a.soc, BoardModel.core3588e.soc, "同一颗芯片，同一个 PID")
         XCTAssertNotEqual(BoardModel.az04a, BoardModel.core3588e, "但它们仍是两个型号")
     }
 
@@ -80,7 +79,7 @@ final class BoardCatalogTests: XCTestCase {
 
     func testEyeScanIsAPropertyOfTheChipNotOfOneBoard() {
         XCTAssertFalse(BoardModel.az05.supports(.eyescan), "RK3288 没有 DQ 眼图")
-        for board in BoardModel.catalog where board.soc.family != "RK3288" {
+        for board in BoardModel.catalog where board.soc != .rk3288 {
             XCTAssertTrue(board.supports(.eyescan), "\(board.code) 应当支持眼图")
         }
         XCTAssertFalse(TestItem.items(for: .ddr, model: .az05).contains { $0.code == "T03" },

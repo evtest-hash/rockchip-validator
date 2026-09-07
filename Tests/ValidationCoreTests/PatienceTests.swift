@@ -105,7 +105,7 @@ final class PatienceTests: XCTestCase {
         let board = pacedBoard(records: 3000, everyPolls: 1, ending: nil, onto: base)
         var checks = 0
         board.online = { checks += 1; return checks <= 6 }
-        let items = BoardItems(adb: board, model: .az08, channels: 4,
+        let items = BoardItems(adb: board, soc: .rk3576, channels: 4,
                                busBitsPerChannel: 16, clock: clock)
 
         let r = await items.runT08(targetBoots: 3_000)
@@ -124,7 +124,7 @@ final class PatienceTests: XCTestCase {
             "1000 SUSPEND_SUCCESS start=0\n1017 cycle 1 rc=0 fail=0"
         var checks = 0
         board.online = { checks += 1; return checks <= 6 }
-        let items = BoardItems(adb: board, model: .az08, channels: 4,
+        let items = BoardItems(adb: board, soc: .rk3576, channels: 4,
                                busBitsPerChannel: 16, clock: clock)
 
         let r = await items.runT07(targetCycles: 3_000)
@@ -246,7 +246,7 @@ final class PatienceTests: XCTestCase {
         let board = pacedBoard(records: 15, everyPolls: 1, ending: "STOP target=15", onto: base)
         var checks = 0
         board.online = { checks += 1; return checks % 20 == 0 }
-        let items = BoardItems(adb: board, model: .az08, channels: 4,
+        let items = BoardItems(adb: board, soc: .rk3576, channels: 4,
                                busBitsPerChannel: 16, clock: clock)
 
         let r = await items.runT08(targetBoots: 15)

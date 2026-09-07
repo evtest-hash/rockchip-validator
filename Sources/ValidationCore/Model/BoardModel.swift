@@ -6,8 +6,8 @@ import Foundation
 /// is adding a row rather than filling in four `switch`es — and filling those in was where the
 /// same RK3588 constants got written twice.
 ///
-/// What stays here is what genuinely varies per board: what it is called, which silicon it is built
-/// on, which marking of that silicon, and how it names itself in a device tree.
+/// What stays here is what genuinely varies per board: what it is called, and which silicon — down
+/// to the marking — it is built on.
 public struct BoardModel: Identifiable {
 
     /// Short code. This is the identity: it names the archive directory, leads the batch id, goes
@@ -59,11 +59,20 @@ public extension BoardModel {
     static let catalog: [BoardModel] = [.az05, .az07, .az08, .az04a, .az04b, .core3588e]
 
     /// The board a code names, or nil for one this build does not know.
-    ///
-    /// Case-insensitive, which is what lets an operator type `az08` on the command line and what
-    /// keeps a mixed-case code such as `Core3588E` matchable without upper-casing the input first.
     static func named(_ code: String) -> BoardModel? {
-        catalog.first { $0.code.caseInsensitiveCompare(code) == .orderedSame }
+        catalog.first { $0.answersTo(code) }
+    }
+
+    /// Whether a string names this board.
+    ///
+    /// One rule, in one place, so no call site can invent a stricter or looser one — and two did.
+    /// It answers for `--model az08` typed at a command line, and for the `board` field of a CI
+    /// index this repo does not publish; the second is why it is case-insensitive rather than the
+    /// exact match it used to be there. `code` is the identity behind five things at once, one of
+    /// them an external system's spelling, and a casing change upstream must not be able to cost
+    /// the archive a rename.
+    func answersTo(_ code: String) -> Bool {
+        self.code.caseInsensitiveCompare(code) == .orderedSame
     }
 }
 
@@ -79,11 +88,7 @@ public extension BoardModel {
 public extension BoardModel {
 
     /// Items requiring an unsupported capability never enter the sequence.
-    func supports(_ capability: Capability) -> Bool {
-        switch capability {
-        case .eyescan: return soc.hasEyeScan
-        }
-    }
+    func supports(_ capability: Capability) -> Bool { soc.capabilities.contains(capability) }
 }
 
 // MARK: - Equality and the wire format

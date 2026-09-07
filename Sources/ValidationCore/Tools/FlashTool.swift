@@ -64,7 +64,7 @@ struct FlashTool {
         else { return nil }
 
         let candidates = list.compactMap { entry -> ImageMeta? in
-            guard entry.str("board") == model.code,
+            guard let board = entry.str("board"), model.answersTo(board),
                   let url = entry.str("url"), !url.isEmpty,
                   let asset = entry.str("asset")
             else { return nil }

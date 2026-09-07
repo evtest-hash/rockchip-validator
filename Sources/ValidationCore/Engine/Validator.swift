@@ -218,7 +218,7 @@ public struct Validator {
         power.begin(reason: "Rockchip 物料验证进行中（长测）")
         defer { power.end() }
 
-        let maskrom = MaskromItems(cli: tool, model: plan.model, deviceID: plan.deviceID)
+        let maskrom = MaskromItems(cli: tool, soc: plan.model.soc, deviceID: plan.deviceID)
         var board: BoardItems?
         var emmc: EmmcItems?
 
@@ -266,7 +266,7 @@ public struct Validator {
                 state.boardIdentity = reported
                 onEvent(.boardBound(serial: serial, identity: reported))
 
-                board = BoardItems(adb: adb, model: plan.model,
+                board = BoardItems(adb: adb, soc: plan.model.soc,
                                    channels: state.measurementInt("T01", "通道数"),
                                    busBitsPerChannel: state.measurementInt("T01", "每通道位宽"),
                                    clock: clock)

@@ -34,7 +34,10 @@ enum CLI {
         }
     }
 
-    private static let usage = """
+    /// The board list is interpolated, not typed out. It was typed out, and by the time a sixth
+    /// board existed this string still named five — while the failure path below derived the same
+    /// list correctly. One of them had to be the source; the derived one is.
+    private static var usage: String { """
         rkval —— Rockchip 物料验证执行台（一次一块板）
 
         这是联机调试用的入口。操作员用界面做验证；多块板同时跑由界面安排。
@@ -46,7 +49,7 @@ enum CLI {
           rkval help                         显示本说明
 
         run 的选项：
-          --model <AZ05|AZ07|AZ08|AZ04A|AZ04B>   必填
+          --model <\(BoardModel.catalog.map(\.code).joined(separator: "|"))>  必填
           --flow <ddr|emmc>                      默认 ddr
           --device-id <id>                       默认：当前唯一在位的那块
           --serial <adb serial>                  只跑板载项（不含刷机项）时用：
@@ -63,7 +66,7 @@ enum CLI {
 
         缩短时长的选项只为联机调试而存在。一次缩短的运行**不是**一次完整验证，
         报告会照实写明它只覆盖了什么。
-        """
+        """ }
 
     // MARK: - run
 
@@ -114,7 +117,7 @@ enum CLI {
             print("当前没有处于 maskrom 的板卡。")
             return 1
         }
-        let mine = model.map { m in devices.filter { $0.matches(m) } } ?? devices
+        let mine = model.map { m in devices.filter { $0.matches(m.soc) } } ?? devices
         for d in mine {
             print("插座 \(d.socket)   \(d.deviceID)   pid=\(d.pid)")
         }

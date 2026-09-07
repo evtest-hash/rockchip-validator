@@ -35,7 +35,7 @@ final class WholeFlowReportTests: XCTestCase {
                              board: ScriptedBoardSession) async -> [String: ItemResult] {
         var results: [String: ItemResult] = [:]
         let clock = SimClock()
-        let maskrom = MaskromItems(cli: tool, model: .az08, deviceID: "002-1.4-2207-350e-NA")
+        let maskrom = MaskromItems(cli: tool, soc: .rk3576, deviceID: "002-1.4-2207-350e-NA")
         results["T01"] = await maskrom.runT01()
         results["T02"] = await maskrom.runT02()
         results["T03"] = await maskrom.runT03()
@@ -51,7 +51,7 @@ final class WholeFlowReportTests: XCTestCase {
         t04.conclude()
         results["T04"] = t04
 
-        let bi = BoardItems(adb: board, model: .az08, channels: 4,
+        let bi = BoardItems(adb: board, soc: .rk3576, channels: 4,
                             busBitsPerChannel: 16, clock: clock)
         results["T05"] = await bi.runT05()
         results["T06"] = await bi.runT06(durationSeconds: 43_200)
